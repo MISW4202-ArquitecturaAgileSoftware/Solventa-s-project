@@ -4,9 +4,8 @@ services:
   gestion-errores:
     image: solventa/gestion-errores:${TAG:?falta TAG en .env}
     build:
-      # Contexto = raíz del repositorio: la imagen necesita libs/solventa-common.
-      context: ../..
-      dockerfile: services/gestion-errores/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     networks:
       # backend: por donde lo llama Votación.

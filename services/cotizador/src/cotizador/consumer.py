@@ -17,13 +17,13 @@ from redis.exceptions import ResponseError
 from cotizador import faults
 from cotizador.config import Config
 from cotizador.health import latir
-from solventa_common.contracts import (
+from cotizador.common.contracts import (
     EstadoRespuesta,
     SobreRespuesta,
     SobreSolicitud,
 )
-from solventa_common.hashing import resultado_hash
-from solventa_common.logging_ import contexto_correlacion
+from cotizador.common.hashing import resultado_hash
+from cotizador.common.logging_ import contexto_correlacion
 
 log = logging.getLogger(__name__)
 

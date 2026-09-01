@@ -13,7 +13,7 @@ igualmente rotas formen mayoría sobre un valor inválido.
 from collections import defaultdict
 from dataclasses import dataclass
 
-from solventa_common.contracts import (
+from votacion.common.contracts import (
     EstadoCotizacion,
     ResultadoCotizacion,
     SobreRespuesta,
@@ -21,7 +21,7 @@ from solventa_common.contracts import (
     TipoIncidente,
     ValorRecibido,
 )
-from solventa_common.pricing import Violacion, validar
+from votacion.common.pricing import Violacion, validar
 
 
 @dataclass(frozen=True, slots=True)

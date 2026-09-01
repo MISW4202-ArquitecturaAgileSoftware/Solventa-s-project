@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from solventa_common.errors import (
+from cotizador.common.errors import (
     ErrorSinConsenso,
     ErrorSocioNoIdentificado,
     ErrorSolventa,
@@ -12,7 +12,7 @@ from solventa_common.errors import (
     ErrorValidacion,
     a_problem_json,
 )
-from solventa_common.ids import es_correlation_id_valido, nuevo_correlation_id
+from cotizador.common.ids import es_correlation_id_valido, nuevo_correlation_id
 
 
 def test_correlation_id_es_uuid_version_7() -> None:

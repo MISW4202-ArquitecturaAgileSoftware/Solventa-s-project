@@ -7,9 +7,9 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 from gestion_errores.escritor import EscritorIncidentes
 from gestion_errores.repositorio import RepositorioIncidentes
-from solventa_common.contracts import Incidente
-from solventa_common.errors import ErrorValidacion
-from solventa_common.logging_ import contexto_correlacion
+from gestion_errores.common.contracts import Incidente
+from gestion_errores.common.errors import ErrorValidacion
+from gestion_errores.common.logging_ import contexto_correlacion
 
 log = logging.getLogger(__name__)
 

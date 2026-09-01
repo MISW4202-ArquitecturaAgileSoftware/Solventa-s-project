@@ -14,7 +14,7 @@ coincide con el esperado, se corrige antes de avanzar.
 Orden de construcción (dictado por las dependencias del diagrama):
 
 ```
-F0 andamiaje  →  F1 solventa-common  →  F2 queue-service  →  F3 cotizador
+F0 andamiaje  →  F1 contratos locales →  F2 queue-service  →  F3 cotizador
               →  F4 gestion-errores  →  F5 votacion       →  F6 api-gateway
               →  F7 experimento
 ```
@@ -30,6 +30,7 @@ porque solo enruta: no puede probarse sin un journey completo detrás.
 | Semántica de la cola | **Fan-out**: cada solicitud llega a A, B y C |
 | Diversidad de réplicas | **Idénticas**, una sola imagen, fallo por `FAULT_MODE` |
 | Layout | `services/<servicio>/`, `requirements.txt` por servicio |
+| Autonomía | Cada servicio contiene sus contratos y utilidades; no existe una librería compartida |
 | Compose | **Un `docker-compose.yaml` por servicio**, unidos por `include:` en la raíz |
 | Cola | `redis:8.10-alpine` (Streams para la ida, listas para la vuelta) |
 | Runtime | Python 3.14.6 (pyenv) |
@@ -40,8 +41,10 @@ porque solo enruta: no puede probarse sin un journey completo detrás.
 
 # 1. Contratos
 
-Los contratos se definen **antes** que cualquier servicio y viven en
-`libs/solventa-common`. Ningún servicio redefine un contrato por su cuenta.
+Cada servicio conserva dentro de su propio paquete los contratos que consume o
+produce. La duplicación pequeña es deliberada: permite construir, probar y
+mantener una carpeta sin depender de código fuente externo. Las pruebas de
+contrato verifican la compatibilidad de los mensajes entre servicios.
 
 ## 1.1 Identificación de la petición
 
@@ -363,7 +366,6 @@ Solventa-s-project/
 ├── .env example.env                       # únicos archivos de entorno, en la raíz
 ├── docker-compose.yaml                    # solo include: + redes compartidas
 ├── pyproject.toml                         # tooling: ruff, mypy, pytest
-├── libs/solventa-common/{pyproject.toml, src/solventa_common/, tests/}
 ├── services/
 │   ├── api-gateway/{docker-compose.yaml, Dockerfile, requirements.txt, src/, tests/}
 │   ├── votacion/{docker-compose.yaml, Dockerfile, requirements.txt, src/, tests/}
@@ -387,8 +389,8 @@ include:
 ```
 
 Con `include`, las rutas relativas de cada archivo resuelven contra **su propio
-directorio**; por eso cada servicio declara `context: ../..` y
-`dockerfile: services/<servicio>/Dockerfile`, para que `libs/` entre en la imagen.
+directorio**; por eso cada servicio declara `context: .` y puede construirse
+usando únicamente los archivos de su carpeta.
 
 **Pasos**
 
@@ -399,8 +401,8 @@ directorio**; por eso cada servicio declara `context: ../..` y
 3. `example.env` commiteado + `.env` local, ambos en la raíz, con: `STACK=solventa`,
    `TAG=dev`, `REDIS_URL`, `QUORUM`, `TIMEOUT_CONSENSO_MS`, `EXPOSE_CONSENSUS`,
    `FAULT_A/B/C`.
-4. Mover los directorios existentes a `services/`; crear `libs/`, `scripts/`,
-   `docs/` y mover ahí `ASRs-experimento.md` e `image.png`.
+4. Mover los directorios existentes a `services/`; crear `scripts/` y `docs/`,
+   y mover ahí `ASRs-experimento.md` e `image.png`.
 5. `docker-compose.yaml` raíz: solo `include:` de los cinco compose y la
    declaración de las redes. Son cinco, no tres:
 
@@ -429,7 +431,7 @@ directorio**; por eso cada servicio declara `context: ../..` y
 
 ```bash
 docker compose config >/dev/null && echo OK
-ls services/{api-gateway,cotizador,gestion-errores,votacion} libs scripts docs
+ls services/{api-gateway,cotizador,gestion-errores,votacion} scripts docs
 ```
 
 **Resultado esperado:** `OK` impreso, sin advertencias de Compose; los cuatro
@@ -438,14 +440,15 @@ entorno fuera de la raíz.
 
 ---
 
-## F1 · `libs/solventa-common`
+## F1 · Contratos y utilidades locales
 
-**Objetivo:** el contrato y el cálculo, probados en aislamiento, sin Flask ni
-Redis de por medio.
+**Objetivo:** que cada servicio pueda construirse y probarse desde su carpeta,
+sin una librería compartida ni un contexto de Docker situado en la raíz.
 
 **Pasos**
 
-1. `contracts.py`: dataclasses `frozen=True` — `Asegurado`, `SolicitudCotizacion`,
+1. Cada paquete contiene su módulo local `common/contracts.py` con las
+   dataclasses que necesita — `Asegurado`, `SolicitudCotizacion`,
    `ResultadoCotizacion`, `SobreSolicitud`, `SobreRespuesta`. Serialización
    explícita a/desde `dict` con `Decimal` como `str`.
 2. `tarifario.py`: tablas `2026.02` y `2025.11` como constantes `Decimal`, con la
@@ -457,7 +460,7 @@ Redis de por medio.
 5. `ids.py`: `nuevo_correlation_id()` sobre `uuid.uuid7()`.
 6. `logging_.py`: logging estructurado JSON con `correlation_id` obligatorio.
 7. `errors.py`: excepciones de dominio + traductor a RFC 9457.
-8. `pyproject.toml` de la librería (instalable con `pip install ./libs/solventa-common`).
+8. Los tests de dominio pertenecen al cotizador, dueño del cálculo y tarifario.
 9. Tests: ejemplo canónico de §2.3, tabla de rangos de edad, `parametrize` de
    los 4 casos de validación, y **test de determinismo**: 1000 ejecuciones de la
    misma entrada producen el mismo hash.
@@ -465,10 +468,9 @@ Redis de por medio.
 **Validación**
 
 ```bash
-pip install ./libs/solventa-common
-pytest libs/solventa-common -q
+PYTHONPATH=services/cotizador/src pytest services/cotizador/tests -q
 python -c "
-from solventa_common.pricing import calcular
+from cotizador.common.pricing import calcular
 # ...ejemplo canónico...
 print(r.prima_mensual, r.prima_anual)"
 ```
@@ -544,9 +546,8 @@ seguiría respondiendo con el consumidor muerto.
    comando que usa el healthcheck del contenedor.
 5. `src/cotizador/__main__.py`: arranque, logging estructurado y apagado limpio
    ante `SIGTERM`.
-6. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = raíz del
-   repo, `pip install ./libs/solventa-common`, usuario `10001`, `CMD` en forma
-   exec.
+6. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = carpeta del
+   servicio, usuario `10001` y `CMD` en forma exec.
 7. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
    `cotizador-a`, `cotizador-b`, `cotizador-c` sobre **una sola imagen**, cada
    uno con su `COTIZADOR_ID` y su `FAULT_MODE`.

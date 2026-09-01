@@ -6,8 +6,8 @@ from decimal import Decimal
 
 import pytest
 
-from solventa_common.contracts import SolicitudCotizacion
-from solventa_common.pricing import calcular, validar
+from cotizador.common.contracts import SolicitudCotizacion
+from cotizador.common.pricing import calcular, validar
 
 from .conftest import FECHA_CALCULO
 
@@ -71,7 +71,7 @@ def test_desvio_moderado_no_lo_detecta_una_regla_de_rango(
     estructural puede verlo. Solo lo detecta la divergencia de hash entre
     réplicas. Este test fija esa frontera para que nadie la borre por accidente.
     """
-    from solventa_common.pricing import redondear
+    from cotizador.common.pricing import redondear
 
     sano = calcular(solicitud_canonica, FECHA_CALCULO)
     desviada = redondear(sano.prima_mensual * factor)

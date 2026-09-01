@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 
-from solventa_common.contracts import Canal
-from solventa_common.errors import ErrorValidacion, TarifarioDesconocido
+from votacion.common.contracts import Canal
+from votacion.common.errors import ErrorValidacion, TarifarioDesconocido
 
 VERSION_VIGENTE = "2026.02"
 VERSION_ANTERIOR = "2025.11"

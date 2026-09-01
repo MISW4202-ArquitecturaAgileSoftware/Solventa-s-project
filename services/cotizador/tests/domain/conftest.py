@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from solventa_common.contracts import (
+from cotizador.common.contracts import (
     Asegurado,
     Canal,
     Genero,

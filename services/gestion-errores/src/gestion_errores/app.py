@@ -16,9 +16,9 @@ from gestion_errores.api import api, salud
 from gestion_errores.config import Config, desde_entorno
 from gestion_errores.escritor import ColaLlenaError, EscritorIncidentes
 from gestion_errores.repositorio import RepositorioIncidentes
-from solventa_common import logging_
-from solventa_common.errors import ErrorSolventa, a_problem_json
-from solventa_common.logging_ import correlation_id_actual
+from gestion_errores.common import logging_
+from gestion_errores.common.errors import ErrorSolventa, a_problem_json
+from gestion_errores.common.logging_ import correlation_id_actual
 
 log = logging.getLogger(__name__)
 

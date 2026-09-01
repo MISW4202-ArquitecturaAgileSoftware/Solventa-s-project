@@ -9,7 +9,7 @@ from decimal import Decimal
 
 import pytest
 
-from solventa_common.contracts import (
+from votacion.common.contracts import (
     EstadoCotizacion,
     EstadoRespuesta,
     ResultadoCotizacion,
@@ -17,8 +17,8 @@ from solventa_common.contracts import (
     SolicitudCotizacion,
     TipoIncidente,
 )
-from solventa_common.hashing import resultado_hash
-from solventa_common.pricing import redondear
+from votacion.common.hashing import resultado_hash
+from votacion.common.pricing import redondear
 from votacion.votador import acuerdo_maximo, resolver
 
 VERSION = "2026.02"
@@ -211,7 +211,7 @@ def test_respuesta_de_error_cuenta_como_invalida(
 def test_tarifario_desactualizado_se_descarta(
     solicitud: SolicitudCotizacion, sano: ResultadoCotizacion
 ) -> None:
-    from solventa_common.pricing import calcular
+    from votacion.common.pricing import calcular
 
     stale = calcular(solicitud, FECHA_CALCULO, "2025.11")
     veredicto = _resolver(

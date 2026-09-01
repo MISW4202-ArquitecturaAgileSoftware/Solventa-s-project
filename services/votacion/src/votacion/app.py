@@ -7,9 +7,9 @@ from typing import Any
 from flask import Flask, Response, jsonify, request
 from redis import Redis
 
-from solventa_common import logging_
-from solventa_common.errors import ErrorSolventa, a_problem_json
-from solventa_common.logging_ import correlation_id_actual
+from votacion.common import logging_
+from votacion.common.errors import ErrorSolventa, a_problem_json
+from votacion.common.logging_ import correlation_id_actual
 from votacion.api import api, salud
 from votacion.config import Config, desde_entorno
 from votacion.reportero import Reportero

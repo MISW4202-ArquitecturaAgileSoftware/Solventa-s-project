@@ -14,7 +14,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from solventa_common.contracts import ResultadoCotizacion
+from cotizador.common.contracts import ResultadoCotizacion
 
 
 def json_canonico(dato: Mapping[str, Any]) -> str:

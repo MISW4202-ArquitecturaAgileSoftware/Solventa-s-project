@@ -11,7 +11,7 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from solventa_common.contracts import (  # noqa: E402
+from votacion.common.contracts import (  # noqa: E402
     Asegurado,
     Canal,
     Genero,
@@ -20,7 +20,7 @@ from solventa_common.contracts import (  # noqa: E402
     ResultadoCotizacion,
     SolicitudCotizacion,
 )
-from solventa_common.pricing import calcular  # noqa: E402
+from votacion.common.pricing import calcular  # noqa: E402
 
 FECHA_CALCULO = date(2026, 8, 31)
 VERSION = "2026.02"

@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# Votación. El contexto de build es la RAÍZ del repositorio: la imagen necesita
-# libs/solventa-common.
+# Votación autocontenido. El contexto de build es esta misma carpeta.
 
 FROM python:3.14.6-slim AS builder
 
@@ -11,13 +10,9 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY services/votacion/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /tmp/requirements.txt
-
-COPY libs/solventa-common /tmp/solventa-common
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install /tmp/solventa-common
 
 FROM python:3.14.6-slim AS runtime
 
@@ -29,7 +24,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin solventa
 
 COPY --from=builder --link /opt/venv /opt/venv
-COPY --link services/votacion/src /app/src
+COPY --link src /app/src
 
 WORKDIR /app
 USER 10001

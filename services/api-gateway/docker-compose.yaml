@@ -4,8 +4,8 @@ services:
   api-gateway:
     image: solventa/api-gateway:${TAG:?falta TAG en .env}
     build:
-      context: ../..
-      dockerfile: services/api-gateway/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     networks:
       # edge: la única zona con salida al exterior. Nadie más se conecta aquí.

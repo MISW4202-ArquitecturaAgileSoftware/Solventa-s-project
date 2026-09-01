@@ -21,9 +21,9 @@ from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
-from solventa_common import tarifario as tarifario_mod
-from solventa_common.contracts import ResultadoCotizacion, SolicitudCotizacion
-from solventa_common.pricing import CENTAVO, calcular_con_tabla, redondear
+from cotizador.common import tarifario as tarifario_mod
+from cotizador.common.contracts import ResultadoCotizacion, SolicitudCotizacion
+from cotizador.common.pricing import CENTAVO, calcular_con_tabla, redondear
 
 
 class ModoFallo(StrEnum):

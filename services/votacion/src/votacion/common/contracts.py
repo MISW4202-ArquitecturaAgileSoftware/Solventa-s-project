@@ -1,4 +1,4 @@
-"""Contratos compartidos: payloads públicos y envelope interno.
+"""Contratos locales: payloads públicos y envelope interno.
 
 Todas las estructuras son inmutables (`frozen=True`). La serialización es
 explícita en ambos sentidos: no se usa `asdict` ni reflexión, porque el formato
@@ -17,7 +17,7 @@ from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any, Self
 
-from solventa_common.errors import ErrorValidacion
+from votacion.common.errors import ErrorValidacion
 
 # --- Enumeraciones del contrato ---------------------------------------------
 

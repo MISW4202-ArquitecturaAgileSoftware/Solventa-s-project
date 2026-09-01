@@ -8,19 +8,19 @@ from typing import Any
 
 import pytest
 
-from solventa_common.contracts import (
+from cotizador.common.contracts import (
     ResultadoCotizacion,
     SobreRespuesta,
     SobreSolicitud,
     SolicitudCotizacion,
     ahora_utc,
 )
-from solventa_common.errors import ErrorValidacion
-from solventa_common.pricing import calcular
+from cotizador.common.errors import ErrorValidacion
+from cotizador.common.pricing import calcular
 
 from .conftest import FECHA_CALCULO
 
-EJEMPLO = Path(__file__).resolve().parents[3] / "docs" / "ejemplos" / "solicitud.json"
+EJEMPLO = Path(__file__).resolve().parents[4] / "docs" / "ejemplos" / "solicitud.json"
 
 
 def _valida() -> dict[str, Any]:
@@ -135,8 +135,8 @@ def test_ida_y_vuelta_del_sobre_de_solicitud() -> None:
 
 
 def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
-    from solventa_common.contracts import EstadoRespuesta
-    from solventa_common.hashing import resultado_hash
+    from cotizador.common.contracts import EstadoRespuesta
+    from cotizador.common.hashing import resultado_hash
 
     resultado = calcular(SolicitudCotizacion.desde_dict(_valida()), FECHA_CALCULO)
     sobre = SobreRespuesta(
@@ -153,7 +153,7 @@ def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
 
 
 def test_sobre_de_respuesta_con_error_no_lleva_resultado() -> None:
-    from solventa_common.contracts import EstadoRespuesta
+    from cotizador.common.contracts import EstadoRespuesta
 
     sobre = SobreRespuesta(
         correlation_id="01a05aa8-24a1-753e-b019-a0810d66a3f6",
@@ -181,7 +181,7 @@ def test_ida_y_vuelta_del_resultado() -> None:
 def test_instante_malformado_da_error_de_validacion(valor: str) -> None:
     """Sin esto, un instante mal formado subiría como ValueError y el servicio
     respondería 500 en lugar del 422 que exige el contrato."""
-    from solventa_common.contracts import Incidente
+    from cotizador.common.contracts import Incidente
 
     dato = {
         "correlation_id": "01a05aa8-24a1-753e-b019-a0810d66a3f6",

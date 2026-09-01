@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from solventa_common import tarifario as tarifario_mod
-from solventa_common.contracts import (
+from experiment_common import tarifario as tarifario_mod
+from experiment_common.contracts import (
     EDAD_MAX,
     EDAD_MIN,
     VIGENCIA_DIAS,
@@ -26,7 +26,7 @@ from solventa_common.contracts import (
     ResultadoCotizacion,
     SolicitudCotizacion,
 )
-from solventa_common.errors import ErrorValidacion
+from experiment_common.errors import ErrorValidacion
 
 CENTAVO = Decimal("0.01")
 

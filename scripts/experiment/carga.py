@@ -1,7 +1,7 @@
 """Generador de carga del experimento.
 
 Se escribe en Python y no en k6 porque k6 no está instalado en la máquina, y
-además Python da algo que k6 no daría: el script importa `solventa_common` y
+además Python da algo que k6 no daría: el script importa `experiment_common` y
 **recalcula la prima esperada de cada solicitud**, así que puede comprobar una a
 una si el sistema entregó el valor correcto. Esa comprobación es exactamente la
 métrica de ASR-12 —«0 primas erróneas entregadas»—, y sin ella habría que
@@ -26,8 +26,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from solventa_common.contracts import SolicitudCotizacion
-from solventa_common.pricing import calcular
+from experiment_common.contracts import SolicitudCotizacion
+from experiment_common.pricing import calcular
 
 CANALES = ["banco_aliado", "retail", "directo"]
 SUMAS = ["80000000.00", "150000000.00", "250000000.00", "400000000.00", "900000000.00"]

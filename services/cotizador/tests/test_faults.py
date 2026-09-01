@@ -13,13 +13,13 @@ from decimal import Decimal
 import pytest
 
 from cotizador import faults
-from solventa_common.contracts import ResultadoCotizacion, SolicitudCotizacion
-from solventa_common.hashing import resultado_hash
-from solventa_common.pricing import validar
+from cotizador.common.contracts import ResultadoCotizacion, SolicitudCotizacion
+from cotizador.common.hashing import resultado_hash
+from cotizador.common.pricing import validar
 
 # Declarados aquí y no importados de conftest: añadir __init__.py a este
 # directorio crearía un segundo paquete llamado `tests` y chocaría con el de
-# libs/solventa-common al recorrer todo el monorepo.
+# otros paquetes al recorrer todo el monorepo.
 FECHA_CALCULO = date(2026, 8, 31)
 VERSION = "2026.02"
 
@@ -132,7 +132,7 @@ def test_la_prima_desviada_conserva_la_coherencia_anual(
 ) -> None:
     """Si la anual quedara descuadrada, `coherencia_anual` delataría el fallo
     por sí sola y `premium_offset` dejaría de probar la vía de divergencia."""
-    from solventa_common.pricing import redondear
+    from cotizador.common.pricing import redondear
 
     roto = _calcular(solicitud, "premium_offset")
     assert roto.prima_anual == redondear(roto.prima_mensual * 12)

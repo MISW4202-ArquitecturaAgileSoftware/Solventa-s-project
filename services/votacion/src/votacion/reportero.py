@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-from solventa_common.contracts import Incidente
+from votacion.common.contracts import Incidente
 from votacion.config import Config
 
 log = logging.getLogger(__name__)

@@ -4,8 +4,8 @@ services:
   votacion:
     image: solventa/votacion:${TAG:?falta TAG en .env}
     build:
-      context: ../..
-      dockerfile: services/votacion/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     networks:
       # data-votacion: para publicar en el stream y recoger las respuestas.

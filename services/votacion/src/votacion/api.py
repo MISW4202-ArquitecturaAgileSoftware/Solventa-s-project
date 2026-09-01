@@ -6,7 +6,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, request
 from redis import Redis
 
-from solventa_common.contracts import (
+from votacion.common.contracts import (
     EstadoCotizacion,
     Incidente,
     SobreSolicitud,
@@ -14,13 +14,13 @@ from solventa_common.contracts import (
     ahora_utc,
     iso_utc,
 )
-from solventa_common.errors import (
+from votacion.common.errors import (
     ErrorSinConsenso,
     ErrorTimeoutCotizacion,
     ErrorValidacion,
 )
-from solventa_common.ids import es_correlation_id_valido, nuevo_correlation_id
-from solventa_common.logging_ import contexto_correlacion, fijar_correlation_id
+from votacion.common.ids import es_correlation_id_valido, nuevo_correlation_id
+from votacion.common.logging_ import contexto_correlacion, fijar_correlation_id
 from votacion import despachador, votador
 from votacion.config import Config
 from votacion.reportero import Reportero

@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from solventa_common.contracts import (
+from votacion.common.contracts import (
     EstadoRespuesta,
     ResultadoCotizacion,
     SobreRespuesta,
@@ -21,8 +21,8 @@ from solventa_common.contracts import (
     SolicitudCotizacion,
     ahora_utc,
 )
-from solventa_common.hashing import resultado_hash
-from solventa_common.pricing import redondear
+from votacion.common.hashing import resultado_hash
+from votacion.common.pricing import redondear
 from votacion.config import Config
 from votacion.despachador import Corte, publicar, recolectar
 

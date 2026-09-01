@@ -17,7 +17,7 @@ from time import perf_counter
 
 from redis import Redis
 
-from solventa_common.contracts import SobreRespuesta, SobreSolicitud, SolicitudCotizacion
+from votacion.common.contracts import SobreRespuesta, SobreSolicitud, SolicitudCotizacion
 from votacion import votador
 from votacion.config import Config
 

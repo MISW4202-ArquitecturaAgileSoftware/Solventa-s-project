@@ -9,9 +9,9 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from api_gateway import cliente_votacion
 from api_gateway.config import Config
 from api_gateway.limitador import Limitador
-from solventa_common.errors import ErrorSocioNoIdentificado
-from solventa_common.ids import nuevo_correlation_id
-from solventa_common.logging_ import contexto_correlacion, fijar_correlation_id
+from api_gateway.common.errors import ErrorSocioNoIdentificado
+from api_gateway.common.ids import nuevo_correlation_id
+from api_gateway.common.logging_ import contexto_correlacion, fijar_correlation_id
 
 log = logging.getLogger(__name__)
 

@@ -3,9 +3,9 @@
 from dataclasses import replace
 from decimal import Decimal
 
-from solventa_common.contracts import SolicitudCotizacion
-from solventa_common.hashing import cuerpo_hashable, json_canonico, resultado_hash
-from solventa_common.pricing import calcular
+from cotizador.common.contracts import SolicitudCotizacion
+from cotizador.common.hashing import cuerpo_hashable, json_canonico, resultado_hash
+from cotizador.common.pricing import calcular
 
 from .conftest import FECHA_CALCULO
 

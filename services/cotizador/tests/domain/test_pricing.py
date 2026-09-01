@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from solventa_common import tarifario
-from solventa_common.contracts import (
+from cotizador.common import tarifario
+from cotizador.common.contracts import (
     Asegurado,
     Canal,
     Genero,
@@ -14,8 +14,8 @@ from solventa_common.contracts import (
     Producto,
     SolicitudCotizacion,
 )
-from solventa_common.errors import ErrorValidacion
-from solventa_common.pricing import calcular, edad_cumplida
+from cotizador.common.errors import ErrorValidacion
+from cotizador.common.pricing import calcular, edad_cumplida
 
 from .conftest import FECHA_CALCULO
 
@@ -125,7 +125,7 @@ def test_prima_anual_es_doce_veces_la_mensual(
 
 def test_solicitud_maxima_no_desborda_el_ratio() -> None:
     """La suma máxima con el perfil más caro debe seguir dentro de las cotas."""
-    from solventa_common.pricing import validar
+    from cotizador.common.pricing import validar
 
     solicitud = SolicitudCotizacion(
         producto=Producto.VIDA_HIPOTECARIO,
