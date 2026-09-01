@@ -46,6 +46,7 @@ def solicitud_de(indice: int, hoy: date) -> dict[str, Any]:
     edad = EDADES[indice % len(EDADES)]
     nacimiento = date(hoy.year - edad, 1, 1) + timedelta(days=(indice * 7) % 300)
     return {
+        "request_id": f"experiment-{indice:08d}",
         "producto": "vida_hipotecario",
         "moneda": "COP",
         "suma_asegurada": SUMAS[(indice * 3) % len(SUMAS)],
@@ -83,13 +84,13 @@ def _esperada(cuerpo: dict[str, Any], solicitud: dict[str, Any]) -> Decimal:
     return calcular(SolicitudCotizacion.desde_dict(solicitud), fecha).prima_mensual
 
 
-def _una(indice: int, url: str, socio: str, hoy: date, timeout: float) -> Registro:
+def _una(indice: int, url: str, hoy: date, timeout: float) -> Registro:
     solicitud = solicitud_de(indice, hoy)
     carga = json.dumps(solicitud).encode("utf-8")
     peticion = urllib.request.Request(
         url,
         data=carga,
-        headers={"Content-Type": "application/json", "X-Partner-Id": socio},
+        headers={"Content-Type": "application/json"},
         method="POST",
     )
     inicio = time.perf_counter()
@@ -131,7 +132,6 @@ def main() -> int:
     parser.add_argument("--n", type=int, required=True)
     parser.add_argument("--por-minuto", type=float, default=500.0)
     parser.add_argument("--url", default="http://localhost:8000/v1/cotizaciones")
-    parser.add_argument("--socio", default="banco-aliado-01")
     parser.add_argument("--hilos", type=int, default=16)
     parser.add_argument("--timeout", type=float, default=5.0)
     parser.add_argument("--salida", type=Path, required=True)
@@ -151,7 +151,7 @@ def main() -> int:
             espera = (arranque + i / tasa_por_s) - time.perf_counter()
             if espera > 0:
                 time.sleep(espera)
-            futuros.append(pool.submit(_una, i, args.url, args.socio, hoy, args.timeout))
+            futuros.append(pool.submit(_una, i, args.url, hoy, args.timeout))
         registros = [f.result() for f in futuros]
 
     duracion = time.perf_counter() - arranque

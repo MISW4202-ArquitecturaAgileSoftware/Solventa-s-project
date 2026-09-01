@@ -1,87 +1,109 @@
-"""App factory del gateway."""
+"""API Gateway mínimo: valida la identidad de la solicitud y la reenvía."""
 
 import logging
+import os
+import time
+import uuid
 from typing import Any
 
+import requests
 from flask import Flask, Response, jsonify, request
 
-from api_gateway.api import api, salud
-from api_gateway.config import Config, desde_entorno
-from api_gateway.limitador import Limitador
-from api_gateway.common import logging_
-from api_gateway.common.errors import ErrorSolventa, a_problem_json
-from api_gateway.common.ids import nuevo_correlation_id
-from api_gateway.common.logging_ import correlation_id_actual, fijar_correlation_id
+from api_gateway.structured_logging import configurar_logging, registrar_log
 
-log = logging.getLogger(__name__)
+app = Flask(__name__)
 
-CABECERA_CORRELACION = "X-Correlation-Id"
+QUOTATION_SERVICE_URL = os.getenv(
+    "QUOTATION_SERVICE_URL", "http://votacion:8000/v1/cotizaciones"
+)
+UPSTREAM_TIMEOUT_MS = int(os.getenv("UPSTREAM_TIMEOUT_MS", "1000"))
 
-
-def crear_app(config: Config | None = None) -> Flask:
-    config = config or desde_entorno()
-    logging_.configurar("api-gateway", config.log_level)
-
-    app = Flask(__name__)
-    app.config["SOLVENTA"] = config
-    app.extensions["limitador"] = Limitador(config.limite_por_minuto)
-
-    app.register_blueprint(api)
-    app.register_blueprint(salud)
-    _registrar_correlacion(app)
-    _registrar_errores(app)
-
-    log.info(
-        "servicio iniciado",
-        extra={
-            "url_votacion": config.url_votacion,
-            "expose_consensus": config.expose_consensus,
-            "limite_por_minuto": config.limite_por_minuto,
-        },
-    )
-    return app
+configurar_logging(os.getenv("LOG_LEVEL", "INFO"))
 
 
-def _registrar_correlacion(app: Flask) -> None:
-    """Garantiza que TODA respuesta lleve X-Correlation-Id, errores incluidos.
-
-    Se hace en un `after_request` y no en cada vista porque una respuesta de
-    error nace en un manejador que no pasó por la vista; si dependiera de la
-    vista, justo las respuestas que más falta hacen rastrear saldrían sin
-    identificador.
-    """
-
-    @app.before_request
-    def _asegurar_correlacion() -> None:
-        if correlation_id_actual() is None:
-            fijar_correlation_id(nuevo_correlation_id())
-
-    @app.after_request
-    def _sellar(respuesta: Response) -> Response:
-        respuesta.headers[CABECERA_CORRELACION] = correlation_id_actual() or "-"
-        return respuesta
-
-    @app.teardown_request
-    def _limpiar(_err: BaseException | None) -> None:
-        # El hilo de gunicorn se reutiliza: sin esto, una petición heredaría el
-        # identificador de la anterior.
-        fijar_correlation_id(None)
+def _respuesta(cuerpo: Any, estado: int, correlation_id: str) -> Response:
+    respuesta = jsonify(cuerpo)
+    respuesta.status_code = estado
+    respuesta.headers["X-Correlation-Id"] = correlation_id
+    return respuesta
 
 
-def _registrar_errores(app: Flask) -> None:
-    @app.errorhandler(ErrorSolventa)
-    def _dominio(err: ErrorSolventa) -> tuple[Response, int]:
-        cuerpo, estado = a_problem_json(
-            err, instance=request.path, correlation_id=correlation_id_actual() or "-"
+@app.post("/v1/cotizaciones")
+def cotizar() -> Response:
+    """Reenvía una cotización sin conocer cómo la procesa el servicio interno."""
+    inicio = time.perf_counter()
+    correlation_id = str(uuid.uuid7())
+    cuerpo = request.get_json(silent=True)
+
+    if not isinstance(cuerpo, dict):
+        return _respuesta({"error": "invalid_json"}, 400, correlation_id)
+
+    request_id = str(cuerpo.get("request_id", "")).strip()
+    if not request_id:
+        return _respuesta({"error": "request_id_required"}, 400, correlation_id)
+
+    try:
+        resultado_servicio = requests.post(
+            QUOTATION_SERVICE_URL,
+            json=cuerpo,
+            headers={
+                "X-Correlation-Id": correlation_id,
+                "X-Request-Id": request_id,
+            },
+            timeout=UPSTREAM_TIMEOUT_MS / 1000,
         )
-        respuesta = jsonify(cuerpo)
-        respuesta.mimetype = "application/problem+json"
-        return respuesta, estado
+    except requests.Timeout:
+        _registrar(
+            inicio,
+            request_id,
+            correlation_id,
+            504,
+            nivel=logging.WARNING,
+            error="upstream_timeout",
+        )
+        return _respuesta({"error": "upstream_timeout"}, 504, correlation_id)
+    except requests.RequestException:
+        _registrar(
+            inicio,
+            request_id,
+            correlation_id,
+            503,
+            nivel=logging.ERROR,
+            error="upstream_unavailable",
+        )
+        return _respuesta({"error": "upstream_unavailable"}, 503, correlation_id)
 
-    @app.errorhandler(404)
-    def _no_encontrado(_err: Any) -> tuple[Response, int]:
-        return jsonify({"title": "Recurso no encontrado", "status": 404}), 404
+    try:
+        respuesta = resultado_servicio.json()
+    except ValueError:
+        _registrar(
+            inicio,
+            request_id,
+            correlation_id,
+            502,
+            nivel=logging.WARNING,
+            error="invalid_upstream_response",
+        )
+        return _respuesta({"error": "invalid_upstream_response"}, 502, correlation_id)
 
-    @app.errorhandler(405)
-    def _metodo(_err: Any) -> tuple[Response, int]:
-        return jsonify({"title": "Método no permitido", "status": 405}), 405
+    _registrar(inicio, request_id, correlation_id, resultado_servicio.status_code)
+    return _respuesta(respuesta, resultado_servicio.status_code, correlation_id)
+
+
+def _registrar(
+    inicio: float,
+    request_id: str,
+    correlation_id: str,
+    estado: int,
+    nivel: int = logging.INFO,
+    error: str | None = None,
+) -> None:
+    registrar_log(
+        nivel,
+        "cotizacion_enrutada",
+        request_id=request_id,
+        correlation_id=correlation_id,
+        status_code=estado,
+        total_time_ms=round((time.perf_counter() - inicio) * 1000, 2),
+        error=error,
+    )

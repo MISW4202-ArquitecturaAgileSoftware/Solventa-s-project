@@ -50,3 +50,76 @@ Cada servicio incluye:
 La autonomía de los servicios conserva el comportamiento funcional de la
 propuesta original. Los siguientes cambios de la Propuesta A se documentarán en
 nuevas secciones y commits separados.
+
+### 5. API Gateway mínimo
+
+#### Propósito del refactor
+
+La implementación original mezclaba responsabilidades propias de un gateway de
+producción con las necesarias para este experimento. Eso aumentaba la cantidad
+de módulos, configuraciones y caminos de error que podían afectar las mediciones
+sin formar parte de las tácticas evaluadas. El servicio se redujo para que su
+participación sea estable, visible y fácil de explicar.
+
+#### Responsabilidades conservadas
+
+El gateway conserva únicamente lo necesario para conectar al cliente con el
+sistema experimental:
+
+- recibir `POST /v1/cotizaciones`;
+- exigir un `request_id` en el cuerpo de la solicitud;
+- generar un `correlation_id` UUIDv7 para rastrear todo el recorrido;
+- reenviar a una URL de cotización genérica con timeout;
+- propagar el cuerpo y el estado HTTP del servicio interno;
+- devolver errores diferenciados para timeout, conexión y respuesta inválida;
+- registrar tiempo, estado e identificadores en formato JSON, usando `INFO`,
+  `WARNING` o `ERROR` según el resultado.
+
+El `request_id` identifica la solicitud desde el punto de vista del cliente. El
+`correlation_id` lo crea el gateway y permite relacionar esa solicitud con la
+votación, los mensajes de Redis y las respuestas de los tres cotizadores.
+
+La variable `QUOTATION_SERVICE_URL` reemplaza el nombre específico de Votación.
+Así el gateway solo conoce el contrato HTTP del siguiente componente y puede
+usarse tanto con una implementación base como con una implementación que tenga
+asincronía y votación.
+
+#### Responsabilidades retiradas y justificación
+
+- **Identificación de socios:** `X-Partner-Id` no es una entrada ni una métrica
+  del experimento. Mantenerlo agregaba rechazos ajenos a las fallas inyectadas.
+- **Límite de tasa:** podía producir respuestas `429` y alterar artificialmente
+  el número de solicitudes exitosas durante las pruebas de carga.
+- **Filtrado del consenso:** el gateway ahora es transparente. La decisión de
+  exponer información experimental permanece en el servicio que genera el
+  consenso mediante su propia configuración.
+- **Readiness y health endpoint:** ningún componente dependía de ellos y no
+  aportaban datos a las métricas evaluadas. También acoplaban el estado del
+  gateway al estado de Votación.
+- **Cliente llamado `cliente_votacion`:** fue reemplazado por una llamada HTTP
+  genérica para evitar que el gateway conozca la táctica instalada detrás.
+- **Rate limiter, app factory, WSGI separado y utilidades comunes:** se retiraron
+  porque dividían un flujo pequeño entre varios archivos sin aportar una
+  variación experimental.
+
+El resultado pasa de varios módulos especializados a dos archivos principales:
+`app.py`, con el flujo HTTP, y `structured_logging.py`, con la salida de logs.
+Las variables requeridas quedan reducidas a `QUOTATION_SERVICE_URL`,
+`UPSTREAM_TIMEOUT_MS` y `LOG_LEVEL`.
+
+#### Alcance de la decisión
+
+Esta simplificación es apropiada para el experimento, pero no pretende definir
+un gateway completo de producción. Autenticación, autorización, rate limiting y
+políticas de exposición podrían incorporarse posteriormente si fueran parte de
+los requisitos del sistema real. No se incluyen ahora porque añadirían variables
+que dificultan atribuir los resultados a la asincronía y a la votación.
+
+#### Validación
+
+- 11 pruebas del API Gateway aprobadas.
+- 182 pruebas del repositorio aprobadas.
+- Imagen reconstruida y contenedor en ejecución.
+- Cotización extremo a extremo con prima mensual `90348.41`.
+- Corrida corta de 10 solicitudes: 10 respuestas exitosas, 0 primas erróneas y
+  P95 de `10.9 ms`.
