@@ -66,10 +66,20 @@ class Registro:
     indice: int
     estado_http: int
     latencia_ms: float
+    correlation_id: str | None = None
     estado_cotizacion: str | None = None
     prima_entregada: str | None = None
     prima_esperada: str | None = None
     erronea: bool = False
+    #: ¿Este journey llevaba realmente un cálculo erróneo?
+    #:
+    #: Un modo de fallo puede ser NEUTRO para ciertas entradas: `factor_skip`
+    #: omite el factor de clase ocupacional, que para la clase 1 ya vale 1.00,
+    #: así que en esas solicitudes la réplica "averiada" calcula el valor
+    #: correcto. Contarlas como fallos inyectados hunde artificialmente la tasa
+    #: de detección de ASR-11, cuyo denominador son los cálculos erróneos
+    #: inyectados, no las solicitudes enviadas.
+    error_inyectado: bool = False
 
 
 def _esperada(cuerpo: dict[str, Any], solicitud: dict[str, Any]) -> Decimal:
@@ -83,8 +93,29 @@ def _esperada(cuerpo: dict[str, Any], solicitud: dict[str, Any]) -> Decimal:
     return calcular(SolicitudCotizacion.desde_dict(solicitud), fecha).prima_mensual
 
 
-def _una(indice: int, url: str, socio: str, hoy: date, timeout: float) -> Registro:
+def inyecta_error(solicitud: dict[str, Any], hoy: date, modo: str) -> bool:
+    """¿El modo de fallo altera realmente el resultado para ESTA entrada?
+
+    `slow` y `crash` son temporales: no corrompen el valor, quitan o retrasan la
+    respuesta, y afectan a todas las solicitudes por igual.
+    """
+    if modo == "none":
+        return False
+    if modo in {"slow", "crash"}:
+        return True
+
+    from cotizador import faults  # import diferido: solo lo necesita el experimento
+    from solventa_common.hashing import resultado_hash
+
+    peticion = SolicitudCotizacion.desde_dict(solicitud)
+    sano = faults.calcular(peticion, hoy, "2026.02", "none")
+    roto = faults.calcular(peticion, hoy, "2026.02", modo)
+    return resultado_hash(sano) != resultado_hash(roto)
+
+
+def _una(indice: int, url: str, socio: str, hoy: date, timeout: float, modo: str) -> Registro:
     solicitud = solicitud_de(indice, hoy)
+    inyectado = inyecta_error(solicitud, hoy, modo)
     carga = json.dumps(solicitud).encode("utf-8")
     peticion = urllib.request.Request(
         url,
@@ -99,18 +130,29 @@ def _una(indice: int, url: str, socio: str, hoy: date, timeout: float) -> Regist
             estado_http = respuesta.status
     except urllib.error.HTTPError as err:
         latencia = (time.perf_counter() - inicio) * 1000
-        return Registro(indice, err.code, latencia)
+        # También en el error hay que quedarse con el correlation_id: un 503 es
+        # un journey que ocurrió y cuyo incidente hay que poder atribuir.
+        return Registro(
+            indice,
+            err.code,
+            latencia,
+            correlation_id=err.headers.get("X-Correlation-Id"),
+            error_inyectado=inyectado,
+        )
     except Exception:
         latencia = (time.perf_counter() - inicio) * 1000
-        return Registro(indice, 0, latencia)
+        return Registro(indice, 0, latencia, error_inyectado=inyectado)
 
     latencia = (time.perf_counter() - inicio) * 1000
+    correlation_id = respuesta.headers.get("X-Correlation-Id")
     entregada = Decimal(cuerpo["cotizacion"]["prima_mensual"])
     esperada = _esperada(cuerpo, solicitud)
     return Registro(
         indice=indice,
         estado_http=estado_http,
         latencia_ms=latencia,
+        correlation_id=correlation_id,
+        error_inyectado=inyectado,
         estado_cotizacion=cuerpo.get("estado"),
         prima_entregada=str(entregada),
         prima_esperada=str(esperada),
@@ -135,6 +177,12 @@ def main() -> int:
     parser.add_argument("--hilos", type=int, default=16)
     parser.add_argument("--timeout", type=float, default=5.0)
     parser.add_argument("--salida", type=Path, required=True)
+    parser.add_argument(
+        "--modo-fallo",
+        default="none",
+        help="modo activo en la réplica averiada, para saber qué solicitudes "
+        "llevan de verdad un cálculo erróneo",
+    )
     args = parser.parse_args()
 
     hoy = datetime.now(tz=UTC).date()
@@ -151,7 +199,9 @@ def main() -> int:
             espera = (arranque + i / tasa_por_s) - time.perf_counter()
             if espera > 0:
                 time.sleep(espera)
-            futuros.append(pool.submit(_una, i, args.url, args.socio, hoy, args.timeout))
+            futuros.append(
+                pool.submit(_una, i, args.url, args.socio, hoy, args.timeout, args.modo_fallo)
+            )
         registros = [f.result() for f in futuros]
 
     duracion = time.perf_counter() - arranque
@@ -165,8 +215,28 @@ def main() -> int:
             por_estado[r.estado_cotizacion] = por_estado.get(r.estado_cotizacion, 0) + 1
 
     erroneas = [r for r in exitosas if r.erronea]
+    con_error = [r for r in registros if r.error_inyectado]
+
+    # Detalle por petición: lo cruza `_deteccion.py` con los incidentes reales
+    # para atribuir cada detección a su journey.
+    detalle = args.salida.with_suffix(".detalle.jsonl")
+    with detalle.open("w", encoding="utf-8") as f:
+        for r in registros:
+            f.write(
+                json.dumps(
+                    {
+                        "correlation_id": r.correlation_id,
+                        "error_inyectado": r.error_inyectado,
+                        "estado_http": r.estado_http,
+                    }
+                )
+                + "\n"
+            )
+
     resumen = {
         "etiqueta": args.etiqueta,
+        "modo_fallo": args.modo_fallo,
+        "errores_inyectados": len(con_error),
         "enviadas": args.n,
         "duracion_s": round(duracion, 1),
         "tasa_real_por_minuto": round(args.n / duracion * 60, 1),

@@ -9,6 +9,9 @@ RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$RAIZ"
 # shellcheck disable=SC1091
 source .venv/bin/activate
+# El generador necesita alcanzar `cotizador.faults` para saber si un modo
+# altera realmente el resultado de cada entrada concreta.
+export PYTHONPATH="$RAIZ/services/cotizador/src${PYTHONPATH:+:$PYTHONPATH}"
 
 RES="scripts/experiment/resultados"
 CARGA="python scripts/experiment/carga.py"
@@ -32,49 +35,46 @@ restaurar() {
   ./scripts/experiment/inyectar.sh c none >/dev/null
 }
 
+SOLO_B="${SOLO_B:-}"
+
 echo "### preparación: réplicas sanas y evidencia a cero"
 restaurar
 docker compose exec -T gestion-errores sh -c '> /datos/incidentes.jsonl'
 docker compose restart gestion-errores >/dev/null 2>&1
 docker compose up -d --wait >/dev/null 2>&1
-rm -f "$RES"/*.json
+if [[ -z "$SOLO_B" ]]; then rm -f "$RES"/*.json "$RES"/*.jsonl; else rm -f "$RES"/B-*; fi
 echo "incidentes iniciales: $($MET total)"
 
+if [[ -z "$SOLO_B" ]]; then
 echo
 echo "### CORRIDA A — línea base (sin fallo), $N_BASE cotizaciones"
 $CARGA --etiqueta baseline --n "$N_BASE" --por-minuto "$POR_MINUTO" \
        --salida "$RES/A-baseline.json"
+fi
 
 echo
 echo "### CORRIDA B — detección, $N_MODO cotizaciones por modo"
 for MODO in "${MODOS[@]}"; do
   echo "--- $MODO"
   ./scripts/experiment/inyectar.sh b "$MODO"
-  ANTES="$($MET total)"
   $CARGA --etiqueta "deteccion-$MODO" --n "$N_MODO" --por-minuto "$POR_MINUTO" \
-         --salida "$RES/B-$MODO.json"
-  DESPUES="$($MET total)"
-  python - "$RES/B-$MODO.json" "$MODO" "$ANTES" "$DESPUES" <<'PY'
-import json, sys
-ruta, modo, antes, despues = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-datos = json.loads(open(ruta).read())
-datos["modo"] = modo
-datos["incidentes_registrados"] = despues - antes
-den = datos["alcanzaron_votacion"]
-datos["tasa_deteccion"] = round((despues - antes) / den, 4) if den else 0.0
-open(ruta, "w").write(json.dumps(datos, indent=2, ensure_ascii=False))
-print(f"    detectados {datos['incidentes_registrados']}/{den} "
-      f"= {datos['tasa_deteccion'] * 100:.2f}%")
-PY
+         --modo-fallo "$MODO" --salida "$RES/B-$MODO.json"
+  # Espera a que el escritor asíncrono vacíe su cola: leer antes contaría de menos.
+  $MET total >/dev/null
+  python scripts/experiment/_deteccion.py \
+      --detalle "$RES/B-$MODO.detalle.jsonl" --resumen "$RES/B-$MODO.json" \
+      --limite $((N_MODO * 2))
 done
 restaurar
 
+if [[ -z "$SOLO_B" ]]; then
 echo
 echo "### CORRIDA C — enmascaramiento sostenido con premium_offset en B"
 ./scripts/experiment/inyectar.sh b premium_offset
 $CARGA --etiqueta enmascaramiento --n "$N_MASCARA" --por-minuto "$POR_MINUTO" \
-       --salida "$RES/C-enmascaramiento.json"
+       --modo-fallo premium_offset --salida "$RES/C-enmascaramiento.json"
 restaurar
+fi
 
 echo
 echo "### informe"

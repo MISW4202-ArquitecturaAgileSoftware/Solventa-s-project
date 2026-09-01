@@ -67,21 +67,33 @@ def main() -> int:
         "",
         "Umbral: **≥ 99 %** de los cálculos erróneos inyectados, detectados.",
         "",
-        "| Modo de fallo | Vía de detección esperada | Cotizaciones | Incidentes | Tasa |",
-        "|---|---|---:|---:|---:|",
+        "El denominador son los **cálculos erróneos inyectados**, no las",
+        "cotizaciones enviadas. Un modo de fallo puede ser neutro para ciertas",
+        "entradas: `factor_skip` omite el factor de clase ocupacional, que para",
+        "la clase 1 ya vale `1.00`, así que en esas solicitudes la réplica",
+        "averiada calcula el valor correcto y no hay error que detectar. Cada",
+        "detección se atribuye a su journey cruzando por `correlation_id`, de",
+        "modo que un incidente ajeno al fallo inyectado no puede inflar la tasa.",
+        "",
+        "| Modo de fallo | Vía de detección esperada | Cotizaciones | Neutras "
+        "| Errores inyectados | Detectados | Tasa |",
+        "|---|---|---:|---:|---:|---:|---:|",
     ]
     tasas: list[float] = []
     for modo, datos in modos:
-        tasa = datos.get("tasa_deteccion", 0.0)
+        det = datos.get("deteccion", {})
+        tasa = det.get("tasa", 0.0)
         tasas.append(tasa)
         lineas.append(
-            f"| `{modo}` | {VIA.get(modo, '—')} | {datos['alcanzaron_votacion']} "
-            f"| {datos.get('incidentes_registrados', 0)} | {tasa * 100:.2f} % |"
+            f"| `{modo}` | {VIA.get(modo, '—')} | {det.get('journeys', 0)} "
+            f"| {det.get('journeys_neutros', 0)} "
+            f"| {det.get('con_error_inyectado', 0)} | {det.get('detectados', 0)} "
+            f"| {tasa * 100:.2f} % |"
         )
 
     peor = min(tasas) if tasas else 0.0
-    total_inc = sum(d.get("incidentes_registrados", 0) for _, d in modos)
-    total_req = sum(d["alcanzaron_votacion"] for _, d in modos)
+    total_inc = sum(d.get("deteccion", {}).get("detectados", 0) for _, d in modos)
+    total_req = sum(d.get("deteccion", {}).get("con_error_inyectado", 0) for _, d in modos)
     global_ = total_inc / total_req if total_req else 0.0
     lineas += [
         "",
@@ -133,11 +145,61 @@ def main() -> int:
     else:
         lineas += ["_Faltan corridas A o C._", ""]
 
+    # --- Disponibilidad observada -------------------------------------------
+    fallidas = {
+        modo: {c: n for c, n in d["por_http"].items() if c != "200"}
+        for modo, d in modos
+        if any(c != "200" for c in d["por_http"])
+    }
+    lineas += [
+        "## Observación de disponibilidad (fuera del alcance de ASR-11/12)",
+        "",
+    ]
+    if fallidas:
+        lineas += [
+            "Algunas cotizaciones no obtuvieron respuesta de éxito:",
+            "",
+            "| Modo | Respuestas no-200 |",
+            "|---|---|",
+        ]
+        lineas += [f"| `{m}` | `{v}` |" for m, v in sorted(fallidas.items())]
+        lineas += [
+            "",
+            "Son journeys en los que, con una réplica ya averiada, **otra sana**",
+            "no respondió dentro del presupuesto de 250 ms. Quedan dos",
+            "respuestas que no coinciden: no hay quórum y el sistema rechaza en",
+            "vez de adivinar. Es el comportamiento especificado —preferible a",
+            "entregar un valor sin confirmar— pero fija el coste de la política:",
+            "con quórum 2 de 3, perder una réplica sana mientras otra está rota",
+            "convierte el journey en un 503.",
+            "",
+        ]
+    else:
+        lineas += ["Todas las cotizaciones obtuvieron respuesta de éxito.", ""]
+
     # --- Límite conocido -----------------------------------------------------
     lineas += [
         "---",
         "",
-        "## Límite conocido del diseño",
+        "## Límites conocidos del diseño",
+        "",
+        "### Coste de la política de quórum",
+        "",
+        "Con quórum 2 de 3, si una réplica sana no responde dentro del",
+        "presupuesto **mientras otra está averiada**, quedan dos respuestas que",
+        "no coinciden: no hay mayoría y el sistema devuelve 503 en vez de",
+        "adivinar. Rechazar es preferible a entregar un valor sin confirmar,",
+        "pero conviene tenerlo escrito: la disponibilidad del journey depende de",
+        "que al menos dos réplicas respondan a tiempo, no solo de que el cálculo",
+        "sea correcto.",
+        "",
+        "Es un suceso raro y transitorio —una corrida previa de este mismo",
+        "experimento lo observó 3 veces en 18.000 cotizaciones (0,017 %), y la",
+        "corrida definitiva ninguna—, así que la tabla de arriba puede no",
+        "mostrarlo. No depende del modo de fallo inyectado, sino de una pausa",
+        "puntual en una réplica sana.",
+        "",
+        "### Fallos correlacionados",
         "",
         "Las tres réplicas ejecutan el **mismo código**. La votación detecta",
         "fallos *no correlacionados*: un error en una réplica, o en dos con",

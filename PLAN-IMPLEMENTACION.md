@@ -733,8 +733,18 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 1. `scripts/experiment/inyectar.sh <replica> <modo>`: reinicia una réplica con su
    `FAULT_MODE` y espera a que quede `healthy`.
-2. `scripts/experiment/carga.js` (k6): 500 cotizaciones/min sostenidas, entradas
-   variadas (edad, suma, plazo, canal) para no medir siempre el mismo camino.
+2. `scripts/experiment/carga.py`: 500 cotizaciones/min sostenidas, entradas
+   variadas (edad, suma, plazo, canal, fumador, clase ocupacional) para no medir
+   siempre el mismo camino del tarifario, generadas de forma **determinista** a
+   partir del índice para que dos corridas sean comparables.
+
+   Se escribe en Python y no en k6 —como se planteó al principio— por dos
+   razones. La práctica: k6 no está instalado. La de fondo: el script importa
+   `solventa_common` y **recalcula la prima esperada de cada solicitud**, así
+   que puede verificar una a una si el sistema entregó el valor correcto. Esa
+   comprobación *es* la métrica «0 primas erróneas entregadas» de ASR-12; con un
+   generador que solo mide latencias habría que confiar en el enmascaramiento en
+   vez de verificarlo.
 3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra el p95 limpio.
 4. **Corrida B — detección:** inyecta cada uno de los 8 modos de fallo, 1000
    cotizaciones por modo, y contrasta los incidentes de `/v1/metricas` contra el
@@ -748,9 +758,21 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 | ASR | Métrica | Umbral | Cómo se obtiene |
 |---|---|---|---|
-| **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes registrados ÷ fallos inyectados, por modo |
+| **ASR-11** | Tasa de detección | **≥ 99 %** | journeys con incidente ÷ journeys con error inyectado, por modo |
 | **ASR-12** | Retardo añadido | **≤ 300 ms** sobre el p95 base | `p95(corrida C) − p95(corrida A)` |
 | **ASR-12** | Primas erróneas entregadas | **0** | ninguna respuesta distinta del valor de consenso sano |
+
+> **El denominador son los cálculos erróneos inyectados, no las cotizaciones
+> enviadas.** Un modo de fallo puede ser *neutro* para ciertas entradas:
+> `factor_skip` omite el factor de clase ocupacional, que para la clase 1 ya vale
+> `1.00`, de modo que en esas solicitudes la réplica averiada calcula el valor
+> correcto y no hay error que detectar. Contarlas hunde la tasa artificialmente
+> —se midió un 75 % que en realidad era un 100 % sobre 750 errores reales—.
+>
+> Por el mismo motivo la atribución se hace cruzando por `correlation_id` y no
+> restando contadores globales: durante una corrida pueden registrarse
+> incidentes ajenos al fallo inyectado (un `sin_quorum` porque una réplica sana
+> se atascó), y sumarlos al numerador inflaría la tasa por encima del 100 %.
 
 **Resultado esperado:** los tres umbrales cumplidos, y un informe que además
 documente el límite conocido del diseño: con tres réplicas idénticas, un error
