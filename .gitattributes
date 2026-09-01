@@ -1,0 +1,7 @@
+# Normalización de fin de línea. Obligatorio en WSL2: un CRLF dentro de una
+# imagen rompe cualquier script con shebang ("bad interpreter: ^M").
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary

@@ -1,0 +1,27 @@
+# El contexto de build es la RAÍZ del repo (los servicios necesitan libs/).
+# Sin este archivo se envían cientos de MB al daemon y la caché se rompe en
+# cada commit.
+.git
+.gitignore
+.gitattributes
+.dockerignore
+
+.venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Documentación y utilidades: no forman parte de ninguna imagen
+docs
+scripts
+**/tests
+PLAN-IMPLEMENTACION.md
+
+# Nunca dentro de una imagen
+.env
+**/.env

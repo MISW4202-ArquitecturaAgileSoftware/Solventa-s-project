@@ -1,0 +1,40 @@
+# API Gateway: única puerta de entrada. Es el ÚNICO servicio en la red `edge`.
+
+services:
+  api-gateway:
+    image: solventa/api-gateway:${TAG:?falta TAG en .env}
+    build:
+      context: ../..
+      dockerfile: services/api-gateway/Dockerfile
+    restart: unless-stopped
+    networks:
+      # edge: la única zona con salida al exterior. Nadie más se conecta aquí.
+      - edge
+      # backend: para alcanzar a Votación.
+      - backend
+    ports:
+      - "${PUERTO_GATEWAY:?falta PUERTO_GATEWAY en .env}:8000"
+    depends_on:
+      votacion:
+        condition: service_healthy
+    environment:
+      URL_VOTACION: ${URL_VOTACION:?falta URL_VOTACION en .env}
+      TIMEOUT_VOTACION_MS: ${TIMEOUT_VOTACION_MS:?falta TIMEOUT_VOTACION_MS en .env}
+      # Su propio flag, independiente del de Votación: el borde no delega en el
+      # interior la decisión de qué puede ver el socio.
+      EXPOSE_CONSENSUS: ${EXPOSE_CONSENSUS_GATEWAY:-false}
+      LIMITE_POR_MINUTO: ${LIMITE_POR_MINUTO:-6000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+networks:
+  edge:
+    name: ${STACK:?falta STACK en .env}_edge
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true

@@ -1,0 +1,14 @@
+{
+  "producto": "vida_hipotecario",
+  "moneda": "COP",
+  "suma_asegurada": "250000000.00",
+  "plazo_meses": 240,
+  "canal": "banco_aliado",
+  "asegurado": {
+    "fecha_nacimiento": "1988-04-17",
+    "genero": "F",
+    "fumador": false,
+    "clase_ocupacional": 2
+  },
+  "consentimiento_open_finance": true
+}

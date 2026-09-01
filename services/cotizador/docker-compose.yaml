@@ -1,0 +1,60 @@
+# Las tres réplicas del diagrama: Cotizador A, B y C.
+#
+# Servicios nombrados y no `deploy.replicas: 3` a propósito. El experimento
+# necesita inyectar el fallo en UNA réplica concreta y saber cuál fue; con
+# réplicas anónimas los contenedores son indistinguibles y no hay dónde dirigir
+# la inyección ni a quién atribuir la divergencia.
+#
+# Anchor de entorno separado del anchor de servicio: `<<` no fusiona en
+# profundidad, así que declarar `environment` en el servicio reemplazaría por
+# completo al del anchor de servicio en lugar de ampliarlo.
+
+x-cotizador-env: &cotizador-env
+  REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
+  STREAM_SOLICITUDES: ${STREAM_SOLICITUDES:?falta STREAM_SOLICITUDES en .env}
+  PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:?falta PREFIJO_RESPUESTAS en .env}
+  TARIFARIO_VERSION: ${TARIFARIO_VERSION:?falta TARIFARIO_VERSION en .env}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+x-cotizador: &cotizador
+  image: solventa/cotizador:${TAG:?falta TAG en .env}
+  build:
+    # Contexto = raíz del repositorio: la imagen necesita libs/solventa-common.
+    # Con `include`, las rutas relativas resuelven contra ESTE directorio.
+    context: ../..
+    dockerfile: services/cotizador/Dockerfile
+  restart: unless-stopped
+  networks:
+    - data-cotizadores
+  depends_on:
+    redis:
+      # "Arrancado" no es "listo": sin esto el worker intentaría crear su
+      # consumer group contra un Redis que todavía no acepta conexiones.
+      condition: service_healthy
+
+services:
+  cotizador-a:
+    <<: *cotizador
+    environment:
+      <<: *cotizador-env
+      COTIZADOR_ID: A
+      FAULT_MODE: ${FAULT_A:-none}
+
+  cotizador-b:
+    <<: *cotizador
+    environment:
+      <<: *cotizador-env
+      COTIZADOR_ID: B
+      FAULT_MODE: ${FAULT_B:-none}
+
+  cotizador-c:
+    <<: *cotizador
+    environment:
+      <<: *cotizador-env
+      COTIZADOR_ID: C
+      FAULT_MODE: ${FAULT_C:-none}
+
+networks:
+  data-cotizadores:
+    name: ${STACK:?falta STACK en .env}_data_cotizadores
+    internal: true

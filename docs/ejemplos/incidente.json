@@ -1,0 +1,12 @@
+{
+  "correlation_id": "01a05aa8-24a1-753e-b019-a0810d66a3f6",
+  "tipo": "divergencia_resultado",
+  "detectado_en": "2026-08-31T20:41:07.512Z",
+  "replicas_divergentes": ["B"],
+  "valor_consenso": "90348.41",
+  "valores_recibidos": [
+    { "cotizador_id": "A", "prima_mensual": "90348.41", "resultado_hash": "9f2a" },
+    { "cotizador_id": "B", "prima_mensual": "103900.67", "resultado_hash": "c41d" },
+    { "cotizador_id": "C", "prima_mensual": "90348.41", "resultado_hash": "9f2a" }
+  ]
+}

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solventa-common"
+version = "0.1.0"
+description = "Contratos, tarifario y cálculo de prima compartidos por los microservicios de Solventa"
+requires-python = ">=3.14"
+# Sin dependencias de ejecución: solo biblioteca estándar. Cualquier dependencia
+# nueva aquí se propaga a las cuatro imágenes del sistema.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+solventa_common = ["py.typed"]

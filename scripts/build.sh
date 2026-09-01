@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$RAIZ"
+[[ -f .env ]] || { echo "falta .env: copiar desde example.env" >&2; exit 1; }
+
+# Construye las imagenes. El contexto de build es la raiz del repo.
+docker compose build "$@"

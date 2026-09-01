@@ -1,0 +1,4 @@
+# Dependencias de ejecución del worker. Versiones fijadas a mano: sin uv no hay
+# lockfile, así que un rango abierto haría irreproducible la imagen.
+# La librería compartida NO va aquí: se instala desde ruta en el Dockerfile.
+redis==8.1.0

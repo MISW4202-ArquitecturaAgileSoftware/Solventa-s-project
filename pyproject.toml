@@ -1,0 +1,75 @@
+# Configuración de tooling del monorepo. NO declara dependencias de ejecución:
+# cada servicio tiene su propio requirements.txt y la librería compartida su
+# propio pyproject.toml. Este archivo solo unifica linter, tipos y tests.
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+# Sin esto, ruff trata `cotizador` y `gestion_errores` como dependencias de
+# terceros y reordena mal los imports.
+src = [
+  "libs/solventa-common/src",
+  "services/api-gateway/src",
+  "services/cotizador/src",
+  "services/gestion-errores/src",
+  "services/votacion/src",
+]
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",    # pycodestyle
+  "F",         # pyflakes
+  "I",         # isort
+  "N",         # pep8-naming
+  "UP",        # pyupgrade
+  "B",         # bugbear
+  "A",         # builtins sombreados
+  "C4",        # comprehensions
+  "DTZ",       # datetime sin zona horaria: crítico para el determinismo
+  "RET",       # returns
+  "SIM",       # simplify
+  "PTH",       # usar pathlib
+  "RUF",
+]
+ignore = [
+  # El dinero se compara con Decimal; prohibir float en el dominio es cosa de
+  # revisión, no del linter.
+  "B008",
+  # N818 exige el sufijo "Error" en las excepciones, convención del inglés. El
+  # dominio de este proyecto está nombrado en español y usa el prefijo:
+  # ErrorValidacion, ErrorSinConsenso. Cambiarlo rompería la coherencia del
+  # dominio para satisfacer una regla de otro idioma.
+  "N818",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+mypy_path = "libs/solventa-common/src:services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src"
+exclude = [
+  "^\\.venv/",
+  # pytest exige que el archivo se llame conftest.py, así que cada servicio
+  # tiene el suyo y mypy los ve a todos como un mismo módulo `conftest`. No se
+  # pueden convertir en paquetes: dos directorios `tests` con __init__.py
+  # colisionarían en pytest. Se excluyen solo estos: los tests en sí se siguen
+  # comprobando.
+  "^services/[^/]+/tests/conftest\\.py$",
+]
+
+[[tool.mypy.overrides]]
+module = ["redis.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-q --strict-markers"
+testpaths = ["libs/solventa-common/tests", "services"]
+markers = [
+  "integracion: requiere Redis u otros servicios levantados",
+]
