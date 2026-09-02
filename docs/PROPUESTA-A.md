@@ -3,6 +3,9 @@
 Bitácora de las decisiones y cambios realizados sobre la propuesta original del
 experimento. Este documento se actualizará junto con cada cambio relevante.
 
+Para una explicación resumida y organizada por componente, consulte
+[Guía de cambios por servicio](GUIA-CAMBIOS-POR-SERVICIO.md).
+
 ## Objetivo
 
 Mantener una arquitectura experimental sencilla, comprensible y fácil de
