@@ -31,7 +31,8 @@ class Veredicto:
 def _valor_recibido(respuesta: SobreRespuesta) -> ValorRecibido:
     return ValorRecibido(
         cotizador_id=respuesta.cotizador_id,
-        prima_mensual=respuesta.resultado.prima_mensual if respuesta.resultado else None,
+        resultado=respuesta.resultado,
+        error=respuesta.error,
     )
 
 

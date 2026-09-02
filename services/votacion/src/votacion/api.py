@@ -105,9 +105,6 @@ def cotizar() -> tuple[Response, int]:
                     tipo=veredicto.tipo_incidente,
                     detectado_en=ahora_utc(),
                     replicas_divergentes=veredicto.replicas_divergentes,
-                    valor_consenso=(
-                        veredicto.resultado.prima_mensual if veredicto.resultado else None
-                    ),
                     valores_recibidos=veredicto.valores_recibidos,
                     detalle=veredicto.detalle,
                 )

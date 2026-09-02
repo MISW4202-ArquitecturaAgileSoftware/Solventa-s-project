@@ -22,7 +22,7 @@ services:
       redis:
         condition: service_healthy
       gestion-errores:
-        condition: service_healthy
+        condition: service_started
       cotizador-a:
         condition: service_started
       cotizador-b:

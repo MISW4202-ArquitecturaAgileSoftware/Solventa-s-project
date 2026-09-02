@@ -194,7 +194,12 @@ def test_los_valores_recibidos_quedan_en_la_evidencia(
         [respuesta("A", sano), respuesta("B", mala), respuesta("C", sano)]
     )
 
-    por_replica = {v.cotizador_id: v.prima_mensual for v in veredicto.valores_recibidos}
+    por_replica = {
+        valor.cotizador_id: (
+            valor.resultado.prima_mensual if valor.resultado is not None else None
+        )
+        for valor in veredicto.valores_recibidos
+    }
     assert por_replica == {
         "A": Decimal("90348.41"),
         "B": Decimal("103900.67"),

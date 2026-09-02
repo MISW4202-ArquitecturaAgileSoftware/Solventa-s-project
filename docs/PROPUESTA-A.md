@@ -238,3 +238,44 @@ funcional completo producido por cada réplica.
 - Con `FAULT_B=factor_skip`: acuerdo 2 de 3, B detectado como divergente y el
   cliente recibió el resultado sano.
 - B fue restaurado a `FAULT_MODE=none` después de la comprobación.
+
+### 8. Gestión de Errores como registro mínimo de evidencia
+
+#### Flujo simplificado
+
+Votación ya realiza el reporte en un hilo fuera de la respuesta al cliente.
+Por eso se eliminó la segunda cola interna de Gestión de Errores: el endpoint
+valida, anexa una línea al JSONL y responde `201 Created`. Una confirmación
+significa ahora que la evidencia ya está persistida, no solo aceptada en memoria.
+
+#### Código y contratos retirados
+
+- Se eliminaron `escritor.py`, su cola, capacidad, contadores de pendientes,
+  apagado con `atexit` y pruebas asociadas.
+- Se retiraron `/health`, `/ready`, el healthcheck de Docker y el WSGI
+  intermedio. El stack del experimento se levanta de forma controlada.
+- Se eliminó la carpeta `common` y los contratos heredados de solicitudes,
+  cotizaciones y sobres Redis.
+- Solo se conservan los tres tipos que Votación puede emitir: divergencia,
+  falta de quórum y réplica sin respuesta.
+
+La evidencia dejó de guardar hashes o únicamente la prima. Cada valor recibido
+contiene el resultado funcional completo —o el error— de la réplica, de modo
+que el incidente permite auditar exactamente qué campo fue diferente.
+
+#### Interfaz conservada
+
+- `POST /v1/incidentes`: persiste y responde `201`.
+- `GET /v1/incidentes`: consulta la evidencia.
+- `GET /v1/metricas`: calcula el numerador de detección sobre el JSONL.
+
+#### Validación
+
+- 16 pruebas de Gestión de Errores y 149 pruebas del conjunto completo
+  aprobadas.
+- Contrato de Votación actualizado para reportar resultados completos.
+- Configuración de Compose y compilación de ambos servicios verificadas.
+- Prueba integrada con `FAULT_B=premium_offset`: A y C formaron mayoría, el
+  cliente recibió la prima correcta y B quedó registrado como divergente.
+- El incidente persistido conservó las respuestas funcionales completas de A,
+  B y C; después de la prueba, B fue restaurado a `FAULT_MODE=none`.
