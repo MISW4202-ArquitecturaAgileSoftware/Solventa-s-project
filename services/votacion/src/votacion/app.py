@@ -7,19 +7,23 @@ from typing import Any
 from flask import Flask, Response, jsonify, request
 from redis import Redis
 
-from votacion.common import logging_
-from votacion.common.errors import ErrorSolventa, a_problem_json
-from votacion.common.logging_ import correlation_id_actual
-from votacion.api import api, salud
+from votacion import structured_logging
+from votacion.errors import ErrorSolventa, a_problem_json
+from votacion.structured_logging import correlation_id_actual
+from votacion.api import api
 from votacion.config import Config, desde_entorno
 from votacion.reportero import Reportero
 
 log = logging.getLogger(__name__)
 
 
-def crear_app(config: Config | None = None, cliente: Redis | None = None) -> Flask:
+def crear_app(
+    config: Config | None = None,
+    cliente: Redis | None = None,
+    reportero: Reportero | None = None,
+) -> Flask:
     config = config or desde_entorno()
-    logging_.configurar("votacion", config.log_level)
+    structured_logging.configurar("votacion", config.log_level)
 
     app = Flask(__name__)
     app.config["SOLVENTA"] = config
@@ -34,13 +38,12 @@ def crear_app(config: Config | None = None, cliente: Redis | None = None) -> Fla
             max_connections=64,
         )
 
-    reportero = Reportero(config)
+    reportero = reportero or Reportero(config)
     app.extensions["redis"] = cliente
     app.extensions["reportero"] = reportero
     atexit.register(reportero.detener)
 
     app.register_blueprint(api)
-    app.register_blueprint(salud)
     _registrar_errores(app)
 
     log.info(

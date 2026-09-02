@@ -17,7 +17,7 @@ from time import perf_counter
 
 from redis import Redis
 
-from votacion.common.contracts import SobreRespuesta, SobreSolicitud, SolicitudCotizacion
+from votacion.contracts import SobreRespuesta, SobreSolicitud
 from votacion import votador
 from votacion.config import Config
 
@@ -54,7 +54,6 @@ def recolectar(
     cliente: Redis,
     config: Config,
     correlation_id: str,
-    solicitud: SolicitudCotizacion,
 ) -> Recoleccion:
     """Recoge respuestas hasta completar, alcanzar quórum + gracia, o agotar el
     presupuesto."""
@@ -63,6 +62,7 @@ def recolectar(
     limite_global = inicio + config.timeout_consenso_ms / 1000
     limite_gracia: float | None = None
     respuestas: list[SobreRespuesta] = []
+    replicas_recibidas: set[str] = set()
     corte = Corte.PRESUPUESTO
 
     while len(respuestas) < config.replicas_esperadas:
@@ -81,15 +81,29 @@ def recolectar(
 
         _, carga = crudo
         try:
-            respuestas.append(SobreRespuesta.desde_dict(json.loads(carga)))
+            respuesta = SobreRespuesta.desde_dict(json.loads(carga))
         except Exception:
             # Una respuesta ilegible es una réplica menos, no un journey roto.
             log.exception("respuesta ilegible descartada")
             continue
 
-        if limite_gracia is None and (
-            votador.acuerdo_maximo(respuestas, solicitud, config.tarifario_version) >= config.quorum
-        ):
+        if respuesta.correlation_id != correlation_id:
+            log.warning(
+                "respuesta con correlación incorrecta descartada",
+                extra={"cotizador_id": respuesta.cotizador_id},
+            )
+            continue
+        if respuesta.cotizador_id in replicas_recibidas:
+            log.warning(
+                "respuesta duplicada descartada",
+                extra={"cotizador_id": respuesta.cotizador_id},
+            )
+            continue
+
+        replicas_recibidas.add(respuesta.cotizador_id)
+        respuestas.append(respuesta)
+
+        if limite_gracia is None and votador.acuerdo_maximo(respuestas) >= config.quorum:
             # Veredicto ya decidido. Se abre una ventana corta para las
             # rezagadas: no cambia la respuesta, pero permite ver y registrar a
             # la réplica divergente.

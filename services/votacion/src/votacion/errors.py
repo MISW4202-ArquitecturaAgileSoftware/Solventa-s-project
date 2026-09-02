@@ -31,16 +31,8 @@ class ErrorValidacion(ErrorSolventa):
         self.detalle = detalle
 
 
-class ErrorSocioNoIdentificado(ErrorSolventa):
-    """Falta o es inválida la cabecera X-Partner-Id."""
-
-    tipo = f"{BASE_TIPO}/socio-no-identificado"
-    titulo = "Socio no identificado"
-    estado = 401
-
-
 class ErrorSinConsenso(ErrorSolventa):
-    """Hubo respuestas, pero ninguna alcanzó quórum ni superó las reglas de validez."""
+    """Hubo respuestas, pero ningún resultado alcanzó el quórum configurado."""
 
     tipo = f"{BASE_TIPO}/sin-consenso"
     titulo = "No fue posible resolver una cotización confiable"
@@ -53,14 +45,6 @@ class ErrorTimeoutCotizacion(ErrorSolventa):
     tipo = f"{BASE_TIPO}/timeout-cotizacion"
     titulo = "La cotización excedió su presupuesto de tiempo"
     estado = 504
-
-
-class TarifarioDesconocido(ErrorSolventa):
-    """Se pidió una versión de tarifario que no existe."""
-
-    tipo = f"{BASE_TIPO}/tarifario-desconocido"
-    titulo = "Versión de tarifario desconocida"
-    estado = 500
 
 
 def a_problem_json(

@@ -29,12 +29,8 @@ COPY --link src /app/src
 WORKDIR /app
 USER 10001
 
-HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).status==200 else 1)"]
-
 # Un worker y muchos hilos: cada petición pasa la mayor parte de su vida
-# bloqueada en BLPOP, que es espera de E/S, no CPU. Varios workers repartirían
-# los contadores de /v1/metricas entre procesos.
+# bloqueada en BLPOP, que es espera de E/S, no CPU.
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "32", \
      "--worker-class", "gthread", "--timeout", "30", "--access-logfile", "-", \
-     "votacion.wsgi:app"]
+     "votacion.app:crear_app()"]

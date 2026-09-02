@@ -5,8 +5,8 @@
   "replicas_divergentes": ["B"],
   "valor_consenso": "90348.41",
   "valores_recibidos": [
-    { "cotizador_id": "A", "prima_mensual": "90348.41", "resultado_hash": "9f2a" },
-    { "cotizador_id": "B", "prima_mensual": "103900.67", "resultado_hash": "c41d" },
-    { "cotizador_id": "C", "prima_mensual": "90348.41", "resultado_hash": "9f2a" }
+    { "cotizador_id": "A", "prima_mensual": "90348.41" },
+    { "cotizador_id": "B", "prima_mensual": "103900.67" },
+    { "cotizador_id": "C", "prima_mensual": "90348.41" }
   ]
 }

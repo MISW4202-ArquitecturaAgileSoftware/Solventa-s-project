@@ -126,7 +126,6 @@ def test_ida_y_vuelta_del_sobre_de_solicitud() -> None:
         correlation_id="01a05aa8-24a1-753e-b019-a0810d66a3f6",
         emitido_en=ahora_utc(),
         fecha_calculo=date(2026, 8, 31),
-        tarifario_version="2026.02",
         payload=SolicitudCotizacion.desde_dict(_valida()),
     )
     ida = json.loads(json.dumps(sobre.a_dict()))
@@ -136,7 +135,6 @@ def test_ida_y_vuelta_del_sobre_de_solicitud() -> None:
 
 def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
     from cotizador.common.contracts import EstadoRespuesta
-    from cotizador.common.hashing import resultado_hash
 
     resultado = calcular(SolicitudCotizacion.desde_dict(_valida()), FECHA_CALCULO)
     sobre = SobreRespuesta(
@@ -144,7 +142,6 @@ def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
         cotizador_id="B",
         estado=EstadoRespuesta.OK,
         duracion_ms=7,
-        resultado_hash=resultado_hash(resultado),
         resultado=resultado,
     )
     ida = json.loads(json.dumps(sobre.a_dict()))
@@ -166,7 +163,6 @@ def test_sobre_de_respuesta_con_error_no_lleva_resultado() -> None:
     reconstruido = SobreRespuesta.desde_dict(ida)
 
     assert reconstruido.resultado is None
-    assert reconstruido.resultado_hash is None
     assert reconstruido == sobre
 
 

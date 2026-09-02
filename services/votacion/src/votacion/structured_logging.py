@@ -5,8 +5,8 @@ no se puede atribuir a un journey y es ruido. El identificador se propaga por
 `ContextVar`, de modo que las funciones de dominio no tienen que recibirlo como
 parámetro ni conocer el logger.
 
-El módulo se llama `logging_` con guion bajo final para no ensombrecer el
-`logging` de la biblioteca estándar dentro del paquete.
+El nombre `structured_logging` lo distingue del módulo `logging` de la
+biblioteca estándar y explica el formato que produce.
 """
 
 import json

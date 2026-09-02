@@ -58,7 +58,6 @@ los Streams de Redis, lo que hace depurable el experimento.
 | `request_id` | El cliente, en el cuerpo JSON | La petición del cliente | Trazabilidad del lado del cliente; es obligatorio y se conserva tal cual |
 | `correlation_id` | API Gateway (`uuid7`) | El journey completo | Une la solicitud con los 3 cálculos y con el veredicto |
 | `cotizador_id` | Cada réplica, de `COTIZADOR_ID` | Una réplica | Identifica quién produjo cada resultado (`A`, `B`, `C`) |
-| `resultado_hash` | Cada réplica | Un resultado | Comparación exacta en la votación |
 
 El gateway rechaza las solicitudes sin `request_id`. El `correlation_id` viaja en:
 
@@ -147,9 +146,9 @@ X-Correlation-Id: 01a05aa8-24a1-753e-b019-a0810d66a3f6
 }
 ```
 
-`estado` toma tres valores: `COTIZADO` (consenso limpio), `COTIZADO_DEGRADADO`
-(hubo divergencia o faltaron respuestas, pero se resolvió un valor correcto) y
-`RECHAZADO` (no fue posible resolver un valor confiable).
+`estado` toma dos valores: `COTIZADO` cuando al menos dos réplicas válidas
+coinciden y `RECHAZADO` cuando no existe quórum. Una sola respuesta nunca se
+entrega al cliente porque no tiene una segunda opinión que la confirme.
 
 ### Bloque de consenso (evidencia del experimento)
 
@@ -200,7 +199,6 @@ apagado, la divergencia sigue reportándose íntegra a `gestion-errores`.
   "version": "1",
   "emitido_en": "2026-08-31T20:41:07.470Z",
   "fecha_calculo": "2026-08-31",
-  "tarifario_version": "2026.02",
   "payload": { "...solicitud normalizada..." }
 }
 ```
@@ -213,18 +211,15 @@ apagado, la divergencia sigue reportándose íntegra a `gestion-errores`.
   "tipo": "cotizacion.calculada",
   "cotizador_id": "B",
   "estado": "OK",
-  "resultado_hash": "9f2a...",
   "duracion_ms": 7,
   "resultado": { "...bloques cotizacion y explicacion..." }
 }
 ```
 
-> **Normalización antes del fan-out.** Votación fija `fecha_calculo` y
-> `tarifario_version` **una sola vez** y las mete en el mensaje. Si cada réplica
-> resolviera la fecha con `date.today()`, una petición a medianoche produciría
-> edades distintas y una divergencia falsa. Las réplicas reciben una entrada
-> completamente determinada; su única fuente de variación permitida es el fallo
-> inyectado.
+> **Normalización antes del fan-out.** Votación fija `fecha_calculo` una sola
+> vez. Si cada réplica resolviera la fecha con `date.today()`, una petición a
+> medianoche podría producir edades distintas. La versión del tarifario es
+> configuración propia de cada Cotizador, dueño del cálculo.
 
 ---
 
@@ -298,49 +293,25 @@ prima_mensual = 78624 × 0.95 × 1.12 × 1.08                = 90348.41
 prima_anual   = 90348.41 × 12                             = 1084180.92
 ```
 
-## 2.4 Regla de validez (la que hace posible ASR-11)
+## 2.4 Premisa de la votación
 
-Un resultado es **estructuralmente inválido** si:
-
-```
-ratio = prima_mensual / suma_asegurada        debe cumplir   0.00005 ≤ ratio ≤ 0.02
-prima_mensual > 0
-prima_anual == round_half_up(prima_mensual × 12, 2)
-tarifario_version == la del mensaje de solicitud
-```
-
-Esto da a Votación **dos vías de detección independientes**, y hay que
-implementarlas ambas:
-
-- **Detección por rango** (funciona incluso con una sola respuesta): el resultado
-  viola una regla de validez.
-- **Detección por divergencia** (necesita ≥2 respuestas): los `resultado_hash`
-  no coinciden entre réplicas.
-
-## 2.5 Hash del resultado
-
-```
-resultado_hash = sha256(json_canonico({
-    "prima_mensual", "prima_anual", "tasa_base_mil",
-    "factores", "tarifario_version", "edad_calculada"
-}))
-```
-
-JSON canónico = claves ordenadas, separadores compactos, sin espacios, UTF-8.
-El hash **excluye** `cotizador_id`, `duracion_ms` y cualquier marca de tiempo:
-esos campos varían por réplica y no son parte del resultado a comparar.
+Votación no recalcula ni valida el negocio. Compara directamente
+el resultado funcional completo y decide por mayoría 2 de 3. La táctica supone
+que como máximo
+falla una réplica. Si dos cotizadores producen el mismo valor incorrecto, ese
+valor formará mayoría y será elegido.
 
 ## 2.6 Modos de fallo inyectables (`FAULT_MODE`)
 
 | Valor | Efecto | Qué mecanismo de detección ejercita |
 |---|---|---|
 | `none` | Cálculo correcto | — (línea base) |
-| `premium_offset` | Multiplica la prima final por 1.15 | Divergencia de hash |
-| `factor_skip` | Ignora `f_clase_ocupacional` | Divergencia de hash |
-| `rate_table_stale` | Usa el tarifario `2025.11` | Divergencia + versión |
-| `rounding_drift` | Redondea con `ROUND_DOWN` a 0 decimales | Divergencia de hash |
-| `out_of_range` | Devuelve `prima_mensual` × 500 | Regla de rango |
-| `silent_zero` | Devuelve `prima_mensual = 0` | Regla de rango |
+| `premium_offset` | Multiplica la prima final por 1.15 | Divergencia de prima |
+| `factor_skip` | Ignora `f_clase_ocupacional` | Divergencia de prima |
+| `rate_table_stale` | Usa el tarifario `2025.11` | Divergencia de prima |
+| `rounding_drift` | Redondea con `ROUND_DOWN` a 0 decimales | Divergencia de prima |
+| `out_of_range` | Devuelve `prima_mensual` × 500 | Divergencia de prima |
+| `silent_zero` | Devuelve `prima_mensual = 0` | Divergencia de prima |
 | `slow` | Duerme 400 ms antes de responder | Quórum parcial por timeout |
 | `crash` | No responde (excepción no capturada) | Quórum parcial |
 
@@ -452,16 +423,13 @@ sin una librería compartida ni un contexto de Docker situado en la raíz.
 2. `tarifario.py`: tablas `2026.02` y `2025.11` como constantes `Decimal`, con la
    función `tasa_base_mil(edad, version)`.
 3. `pricing.py`: `calcular(solicitud, fecha_calculo, version) -> ResultadoCotizacion`
-   implementando §2.3, y `validar(resultado, solicitud) -> list[Violacion]`
-   implementando §2.4.
-4. `hashing.py`: `json_canonico()` y `resultado_hash()` según §2.5.
-5. `ids.py`: `nuevo_correlation_id()` sobre `uuid.uuid7()`.
-6. `logging_.py`: logging estructurado JSON con `correlation_id` obligatorio.
-7. `errors.py`: excepciones de dominio + traductor a RFC 9457.
-8. Los tests de dominio pertenecen al cotizador, dueño del cálculo y tarifario.
-9. Tests: ejemplo canónico de §2.3, tabla de rangos de edad, `parametrize` de
-   los 4 casos de validación, y **test de determinismo**: 1000 ejecuciones de la
-   misma entrada producen el mismo hash.
+   implementando §2.3.
+4. `ids.py`: `nuevo_correlation_id()` sobre `uuid.uuid7()`.
+5. Logging estructurado JSON con `correlation_id` obligatorio.
+6. `errors.py`: excepciones de dominio + traductor a RFC 9457.
+7. Los tests de dominio pertenecen al cotizador, dueño del cálculo y tarifario.
+8. Tests: ejemplo canónico de §2.3, tabla de rangos de edad y determinismo del
+   resultado para una misma entrada.
 
 **Validación**
 
@@ -549,8 +517,7 @@ seguiría respondiendo con el consumidor muerto.
 7. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
    `cotizador-a`, `cotizador-b`, `cotizador-c` sobre **una sola imagen**, cada
    uno con su `COTIZADOR_ID` y su `FAULT_MODE`.
-8. Tests: unitarios de `faults.py` (cada modo altera el resultado como dice
-   §2.6, y los que deben ser invisibles a las reglas de validez lo son) e
+8. Tests: unitarios de `faults.py` (cada modo altera la prima como dice §2.6) e
    integración del consumidor contra el Redis del stack.
 
 **Validación**
@@ -565,9 +532,7 @@ docker compose exec redis redis-cli LRANGE cot:resp:<correlation_id> 0 -1
 
 **Resultado esperado:** `uid=10001`; las tres réplicas `healthy`; la lista de
 respuestas contiene **exactamente 3 elementos**, con `cotizador_id` `A`, `B` y
-`C`, `prima_mensual = "90348.41"` en los tres y **el mismo `resultado_hash`**.
-Un hash distinto entre réplicas sanas significa que el cálculo no es
-determinista: hay que arreglarlo aquí, no en Votación.
+`C`, y `prima_mensual = "90348.41"` en los tres.
 
 Segunda validación, con fallo inyectado:
 
@@ -576,8 +541,7 @@ FAULT_B=premium_offset docker compose up -d cotizador-b
 # volver a publicar y releer la lista
 ```
 
-**Resultado esperado:** A y C mantienen `90348.41` y su hash; B devuelve
-`103900.67` con un hash distinto.
+**Resultado esperado:** A y C mantienen `90348.41`; B devuelve `103900.67`.
 
 ## F4 · `gestion-errores`
 
@@ -587,7 +551,7 @@ antes que Votación, que es quien lo llama.
 **Pasos**
 
 1. `POST /v1/incidentes` con el envelope de incidente: `correlation_id`,
-   `tipo` (`divergencia_resultado` \| `regla_de_validez` \| `sin_quorum` \|
+   `tipo` (`divergencia_resultado` \| `sin_quorum` \|
    `replica_no_responde`), `replicas_divergentes`, `valor_consenso`,
    `valores_recibidos`, `detectado_en`.
 2. Persistencia: `append` a JSONL en un volumen nombrado. Suficiente y auditable
@@ -621,13 +585,12 @@ latencia.
 
 **Pasos**
 
-1. `POST /v1/cotizaciones` interno: valida, **normaliza** (fija `fecha_calculo`
-   y `tarifario_version`, §1.4) y genera el envelope.
+1. `POST /v1/cotizaciones` interno: fija `fecha_calculo` y genera el envelope.
 2. `XADD cot:req` una sola vez — el fan-out lo hacen los consumer groups.
 3. Recolección: `BLPOP cot:resp:{correlation_id}` en bucle con **presupuesto
    global de 250 ms**, no un timeout por respuesta.
 4. **Corte anticipado por quórum, con ventana de gracia.** En cuanto hay 2
-   huellas válidas iguales el veredicto ya está decidido, pero no se corta en
+   primas mensuales iguales el veredicto ya está decidido, pero no se corta en
    seco: se abre una ventana de **25 ms** para recoger a las rezagadas. Esa
    espera NO cambia lo que se responde; existe solo para poder *ver* a la
    réplica divergente y registrarla.
@@ -638,28 +601,26 @@ latencia.
    llegada. Con tres réplicas, eso ocurriría en dos de cada tres casos.
 
    El corte sigue acotando el peor caso: una réplica `slow` (400 ms) o `crash`
-   nunca cuesta el presupuesto entero. Y el corte por quórum **solo se abre con
-   respuestas que ya pasaron las reglas de validez**: dos réplicas rotas del
-   mismo modo producen la misma huella, y contarlas como acuerdo cortaría la
-   recolección antes de leer a la réplica sana.
+   nunca cuesta el presupuesto entero.
 
    Nota de infraestructura: Redis revisa los clientes bloqueados a `hz` veces
    por segundo. Con el valor por defecto (10) un timeout de `BLPOP` de 25 ms
    tarda ~105 ms en vencer. `queue-service/redis.conf` fija `hz 100` para bajar
    esa resolución a ~10 ms.
 5. Resolución del veredicto, en este orden:
-   - descartar los resultados que violen una regla de validez (§2.4);
-   - agrupar los supervivientes por `resultado_hash`;
+   - descartar respuestas técnicas sin resultado;
+   - agrupar directamente por el resultado funcional completo;
    - si un grupo tiene ≥ `QUORUM` (=2) → `COTIZADO`, ese es el valor;
-   - si hay respuestas pero ninguna alcanza quórum → `COTIZADO_DEGRADADO` si
-     exactamente una supera todas las reglas de validez; si no, `RECHAZADO` (503);
+   - si hay respuestas pero ninguna alcanza quórum → `RECHAZADO` (503);
    - si vence el presupuesto sin respuestas → `RECHAZADO` (504).
-6. Reporte a `gestion-errores` **después** de haber respondido al cliente, en un
-   hilo aparte (`fire-and-forget` con reintento acotado).
+6. Reporte a `gestion-errores` en un hilo aparte (`fire-and-forget`), sin
+   bloquear la respuesta al cliente.
 7. `limpieza`: `DEL cot:resp:{correlation_id}` tras resolver.
-8. Métricas: `latencia_consenso_ms`, `respuestas_recibidas`, `divergencias`.
+8. Evidencia: `latencia_consenso_ms`, `respuestas_recibidas` y divergencias en
+   el bloque de consenso; incidentes persistidos por Gestión de Errores.
 9. Tests con dobles de Redis: 3 iguales · 2 iguales + 1 divergente · 3 distintos ·
-   1 sola respuesta · 0 respuestas · 1 fuera de rango + 2 iguales.
+   1 sola respuesta · 0 respuestas · 1 divergente + 2 iguales · respuesta
+   duplicada · correlación ajena.
 
 **Validación**
 
@@ -682,7 +643,7 @@ curl -s localhost:8003/v1/metricas | jq
 | Sin fallo | `COTIZADO` | `90348.41` | `false` | no |
 | `FAULT_B=premium_offset` | `COTIZADO` | **`90348.41`** | `true`, `replicas_divergentes: ["B"]` | sí |
 | `FAULT_B=crash` | `COTIZADO` | `90348.41` | `true`, `respuestas_recibidas: 2` | sí |
-| `FAULT_B` y `FAULT_C` distintos | `COTIZADO_DEGRADADO` | valor de A | `true` | sí |
+| `FAULT_B` y `FAULT_C` distintos | `RECHAZADO` | no se entrega | `true` | sí |
 
 La celda en negrita es ASR-12: **el cliente recibe el valor correcto pese al
 fallo activo**. Y `latencia_consenso_ms` debe salir por debajo de 250 ms en

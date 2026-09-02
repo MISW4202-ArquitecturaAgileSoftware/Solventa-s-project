@@ -123,3 +123,81 @@ que dificultan atribuir los resultados a la asincronía y a la votación.
 - Cotización extremo a extremo con prima mensual `90348.41`.
 - Corrida corta de 10 solicitudes: 10 respuestas exitosas, 0 primas erróneas y
   P95 de `10.9 ms`.
+
+### 6. Servicio de Votación seguro y reducido
+
+#### Propósito del refactor
+
+Votación contiene la táctica central del experimento, por lo que no puede ser
+tan pequeño como el API Gateway. La revisión separó la complejidad necesaria
+—publicar, recolectar y decidir— de lógica de cálculo e infraestructura que no
+le correspondían.
+
+#### Correcciones de la decisión
+
+- Las respuestas se deduplican por `cotizador_id`; una réplica no puede formar
+  quórum enviando dos veces el mismo resultado.
+- Se descartan respuestas cuyo `correlation_id` no corresponde al recorrido
+  actual.
+- Votación compara directamente el resultado funcional completo —cotización,
+  versión del tarifario y explicación—; no calcula ni utiliza hashes.
+- Sin dos respuestas válidas coincidentes no se entrega una cotización. El
+  anterior estado `COTIZADO_DEGRADADO`, basado en una sola respuesta, se
+  reemplazó por `RECHAZADO` porque no existía una segunda opinión que confirmara
+  el valor.
+
+Estas reglas protegen la propiedad esencial de una votación: el quórum debe
+estar formado por réplicas distintas que entregaron el mismo valor.
+
+#### Respuestas HTTP
+
+| Situación | HTTP | Decisión |
+|---|:---:|---|
+| Resultado completo idéntico en 2 o 3 réplicas | `200` | Se entrega el resultado mayoritario |
+| Respuestas recibidas, pero ninguna alcanza el quórum | `503` | Se rechaza por falta de consenso |
+| Una sola réplica responde | `503` | Se rechaza porque no existe segunda opinión |
+| Ninguna réplica responde antes del límite | `504` | Se informa timeout del recorrido |
+| Excepción inesperada en Votación | `500` | Error interno |
+
+#### Responsabilidades retiradas
+
+- Se retiraron la fórmula de prima, las tablas del tarifario y todas las reglas
+  de validez del negocio. Votación no decide si un valor es razonable: solo lo
+  compara con las otras respuestas.
+- Se eliminaron `hashing.py` y `validacion_resultado.py`. Los contratos son
+  estructuras inmutables y se comparan directamente, sin introducir una
+  representación intermedia.
+- `TARIFARIO_VERSION` dejó de ser configuración de Votación. Cada Cotizador usa
+  su propia versión al realizar el cálculo.
+- Se eliminaron `/health`, `/ready` y los contadores de `/v1/metricas`, porque no
+  son entradas ni evidencias necesarias del experimento. Los resultados del
+  consenso viajan en la respuesta y los incidentes se almacenan en Gestión de
+  Errores.
+- Se eliminó el archivo WSGI intermedio; Gunicorn invoca directamente la fábrica
+  de la aplicación.
+- Se retiraron errores heredados de otros servicios que Votación nunca usaba.
+- Se eliminó la carpeta interna `common`. Sus contratos, errores, IDs y
+  logging estructurado pertenecen directamente a Votación y ahora están en la
+  raíz del paquete, evitando un nivel de navegación que no representaba una
+  frontera arquitectónica real.
+
+La fábrica de aplicación sí se conserva. A diferencia del gateway, aquí permite
+inyectar un doble de Redis y un reportero controlado en las pruebas sin levantar
+infraestructura externa.
+
+Esta versión hace explícita la premisa de la táctica: como máximo puede fallar
+una réplica. Si dos cotizadores coinciden en un valor incorrecto, ese valor
+formará mayoría; Votación no conoce el cálculo para refutarla.
+
+#### Validación
+
+- 35 pruebas del servicio de Votación.
+- 181 pruebas aprobadas en el repositorio completo.
+- Nuevas pruebas para duplicados, correlación ajena, comparación del resultado
+  completo y contrato HTTP.
+- Sin fallas: respuesta `200`, acuerdo 3 de 3 y prima mensual `90348.41`.
+- Con `FAULT_B=premium_offset`: respuesta `200`, acuerdo 2 de 3, réplica B
+  detectada como divergente y prima correcta `90348.41`.
+- Con B y C en modo `crash`: respuesta `503`; el único valor disponible no se
+  entrega por falta de quórum.
+- Tras restaurar las réplicas, el sistema vuelve a acuerdo 3 de 3.

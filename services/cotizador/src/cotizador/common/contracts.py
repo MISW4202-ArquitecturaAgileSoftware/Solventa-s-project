@@ -371,16 +371,14 @@ class ResultadoCotizacion:
 class SobreSolicitud:
     """Mensaje que Votación publica en el stream y que leen las tres réplicas.
 
-    `fecha_calculo` y `tarifario_version` se fijan aquí, una sola vez, antes del
-    fan-out. Si cada réplica las resolviera por su cuenta, una petición en el
-    cambio de día produciría edades distintas y una divergencia falsa. Las
-    réplicas reciben una entrada completamente determinada.
+    `fecha_calculo` se fija aquí, una sola vez, antes del fan-out. Si cada
+    réplica consultara su reloj, una petición en el cambio de día podría
+    producir edades distintas y una divergencia falsa.
     """
 
     correlation_id: str
     emitido_en: datetime
     fecha_calculo: date
-    tarifario_version: str
     payload: SolicitudCotizacion
     tipo: str = "cotizacion.solicitada"
     version: str = "1"
@@ -391,7 +389,6 @@ class SobreSolicitud:
             correlation_id=_leer_texto(dato, "correlation_id"),
             emitido_en=_leer_instante(dato, "emitido_en"),
             fecha_calculo=_leer_fecha(dato, "fecha_calculo"),
-            tarifario_version=_leer_texto(dato, "tarifario_version"),
             payload=SolicitudCotizacion.desde_dict(_leer_mapa(dato, "payload")),
             tipo=_leer_texto(dato, "tipo"),
             version=_leer_texto(dato, "version"),
@@ -404,24 +401,18 @@ class SobreSolicitud:
             "version": self.version,
             "emitido_en": iso_utc(self.emitido_en),
             "fecha_calculo": self.fecha_calculo.isoformat(),
-            "tarifario_version": self.tarifario_version,
             "payload": self.payload.a_dict(),
         }
 
 
 @dataclass(frozen=True, slots=True)
 class SobreRespuesta:
-    """Resultado de una réplica, depositado en `cot:resp:{correlation_id}`.
-
-    `resultado_hash` es lo único que Votación compara. `cotizador_id` y
-    `duracion_ms` varían por réplica y quedan deliberadamente fuera del hash.
-    """
+    """Resultado de una réplica, depositado en `cot:resp:{correlation_id}`."""
 
     correlation_id: str
     cotizador_id: str
     estado: EstadoRespuesta
     duracion_ms: int
-    resultado_hash: str | None = None
     resultado: ResultadoCotizacion | None = None
     error: str | None = None
     tipo: str = "cotizacion.calculada"
@@ -434,14 +425,12 @@ class SobreRespuesta:
             if isinstance(crudo_resultado, Mapping)
             else None
         )
-        crudo_hash = dato.get("resultado_hash")
         crudo_error = dato.get("error")
         return cls(
             correlation_id=_leer_texto(dato, "correlation_id"),
             cotizador_id=_leer_texto(dato, "cotizador_id"),
             estado=_leer_enum(dato, "estado", EstadoRespuesta),
             duracion_ms=_leer_entero(dato, "duracion_ms"),
-            resultado_hash=crudo_hash if isinstance(crudo_hash, str) else None,
             resultado=resultado,
             error=crudo_error if isinstance(crudo_error, str) else None,
             tipo=_leer_texto(dato, "tipo"),
@@ -453,7 +442,6 @@ class SobreRespuesta:
             "tipo": self.tipo,
             "cotizador_id": self.cotizador_id,
             "estado": self.estado.value,
-            "resultado_hash": self.resultado_hash,
             "duracion_ms": self.duracion_ms,
             "resultado": self.resultado.a_dict() if self.resultado is not None else None,
             "error": self.error,
@@ -469,23 +457,19 @@ class ValorRecibido:
 
     cotizador_id: str
     prima_mensual: Decimal | None = None
-    resultado_hash: str | None = None
 
     @classmethod
     def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
         crudo_prima = dato.get("prima_mensual")
-        crudo_hash = dato.get("resultado_hash")
         return cls(
             cotizador_id=_leer_texto(dato, "cotizador_id"),
             prima_mensual=Decimal(crudo_prima) if isinstance(crudo_prima, str) else None,
-            resultado_hash=crudo_hash if isinstance(crudo_hash, str) else None,
         )
 
     def a_dict(self) -> dict[str, Any]:
         return {
             "cotizador_id": self.cotizador_id,
             "prima_mensual": str(self.prima_mensual) if self.prima_mensual is not None else None,
-            "resultado_hash": self.resultado_hash,
         }
 
 

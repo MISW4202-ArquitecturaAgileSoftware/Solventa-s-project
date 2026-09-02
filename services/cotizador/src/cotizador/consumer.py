@@ -2,7 +2,7 @@
 
 La réplica es deliberadamente tonta: no sabe que existe una votación, ni cuántas
 réplicas hay, ni que su resultado se compara con nada. Lee un sobre completamente
-determinado —Votación ya fijó `fecha_calculo` y `tarifario_version`— y responde.
+determinado —Votación ya fijó `fecha_calculo`— y responde.
 """
 
 import json
@@ -22,7 +22,6 @@ from cotizador.common.contracts import (
     SobreRespuesta,
     SobreSolicitud,
 )
-from cotizador.common.hashing import resultado_hash
 from cotizador.common.logging_ import contexto_correlacion
 
 log = logging.getLogger(__name__)
@@ -64,7 +63,7 @@ def procesar(cliente: Redis, config: Config, mensaje_id: str, campos: dict[str, 
             resultado = faults.calcular(
                 sobre.payload,
                 sobre.fecha_calculo,
-                sobre.tarifario_version,
+                config.tarifario_version,
                 config.fault_mode,
             )
         except faults.FalloInyectado:
@@ -90,7 +89,6 @@ def procesar(cliente: Redis, config: Config, mensaje_id: str, campos: dict[str, 
                 cotizador_id=config.cotizador_id,
                 estado=EstadoRespuesta.OK,
                 duracion_ms=duracion,
-                resultado_hash=resultado_hash(resultado),
                 resultado=resultado,
             )
             log.info(
