@@ -16,10 +16,6 @@ def test_el_grupo_se_deriva_de_la_identidad() -> None:
     assert desde_entorno().grupo == "grupo-b"
 
 
-def test_la_clave_de_latido_se_deriva_de_la_identidad() -> None:
-    assert desde_entorno().clave_latido == "cot:hb:b"
-
-
 def test_la_clave_de_respuestas_lleva_el_correlation_id() -> None:
     config = desde_entorno()
     assert config.clave_respuestas("01a05aa8") == "cot:resp:01a05aa8"

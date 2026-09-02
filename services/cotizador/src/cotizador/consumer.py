@@ -16,13 +16,12 @@ from redis.exceptions import ResponseError
 
 from cotizador import faults
 from cotizador.config import Config
-from cotizador.health import latir
-from cotizador.common.contracts import (
+from cotizador.contracts import (
     EstadoRespuesta,
     SobreRespuesta,
     SobreSolicitud,
 )
-from cotizador.common.logging_ import contexto_correlacion
+from cotizador.structured_logging import contexto_correlacion
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +34,8 @@ def asegurar_grupo(cliente: Redis, config: Config) -> None:
 
     Se crea en `$` (solo mensajes nuevos) y no en `0`. Con `0`, cada reinicio
     reprocesaría todo el stream retenido y ensuciaría las mediciones de latencia
-    del experimento. Es seguro porque Votación solo arranca cuando las tres
-    réplicas están `healthy`, y el latido no se emite hasta después de esta
-    llamada: cuando alguien puede publicar, los tres grupos ya existen.
+    del experimento. El stack controlado arranca las réplicas antes de ejecutar
+    cualquier prueba.
     """
     try:
         cliente.xgroup_create(
@@ -112,9 +110,8 @@ def procesar(cliente: Redis, config: Config, mensaje_id: str, campos: dict[str, 
 
 
 def bucle(cliente: Redis, config: Config, parar: threading.Event) -> None:
-    """Consume hasta que se pida parar. Cada vuelta refresca el latido."""
+    """Consume solicitudes hasta que se pida detener el proceso."""
     asegurar_grupo(cliente, config)
-    latir(cliente, config)
     log.info(
         "worker listo",
         extra={"cotizador_id": config.cotizador_id, "fault_mode": config.fault_mode},
@@ -142,10 +139,6 @@ def bucle(cliente: Redis, config: Config, parar: threading.Event) -> None:
             log.warning("consumer group desaparecido, recreando", extra={"grupo": config.grupo})
             asegurar_grupo(cliente, config)
             continue
-        # Se refresca también cuando el bloqueo vence sin mensajes: el latido
-        # mide que el bucle gira, no que haya tráfico.
-        latir(cliente, config)
-
         for _stream, mensajes in lotes or []:
             for mensaje_id, campos in mensajes:
                 try:

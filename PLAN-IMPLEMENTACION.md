@@ -416,17 +416,17 @@ sin una librería compartida ni un contexto de Docker situado en la raíz.
 
 **Pasos**
 
-1. Cada paquete contiene su módulo local `common/contracts.py` con las
-   dataclasses que necesita — `Asegurado`, `SolicitudCotizacion`,
-   `ResultadoCotizacion`, `SobreSolicitud`, `SobreRespuesta`. Serialización
-   explícita a/desde `dict` con `Decimal` como `str`.
+1. Cada paquete contiene su propio `contracts.py` con únicamente las dataclasses
+   que usa. La serialización es explícita y los `Decimal` viajan como `str`.
 2. `tarifario.py`: tablas `2026.02` y `2025.11` como constantes `Decimal`, con la
    función `tasa_base_mil(edad, version)`.
 3. `pricing.py`: `calcular(solicitud, fecha_calculo, version) -> ResultadoCotizacion`
    implementando §2.3.
-4. `ids.py`: `nuevo_correlation_id()` sobre `uuid.uuid7()`.
+4. Los servicios que originan recorridos contienen `ids.py`; el Cotizador
+   recibe el `correlation_id` en el sobre y no genera uno.
 5. Logging estructurado JSON con `correlation_id` obligatorio.
-6. `errors.py`: excepciones de dominio + traductor a RFC 9457.
+6. `errors.py`: excepciones propias; solo los servicios HTTP incluyen traducción
+   a RFC 9457.
 7. Los tests de dominio pertenecen al cotizador, dueño del cálculo y tarifario.
 8. Tests: ejemplo canónico de §2.3, tabla de rangos de edad y determinismo del
    resultado para una misma entrada.
@@ -436,7 +436,7 @@ sin una librería compartida ni un contexto de Docker situado en la raíz.
 ```bash
 PYTHONPATH=services/cotizador/src pytest services/cotizador/tests -q
 python -c "
-from cotizador.common.pricing import calcular
+from cotizador.pricing import calcular
 # ...ejemplo canónico...
 print(r.prima_mensual, r.prima_anual)"
 ```
@@ -489,18 +489,15 @@ propósito: no sabe que existe la votación.
 
 **Por qué no lleva Flask.** El cotizador no recibe peticiones HTTP de nadie: su
 trabajo es `XREADGROUP` → calcular → `LPUSH`. Meterle un servidor web pondría
-dos responsabilidades en un contenedor y obligaría a fijar gunicorn a un solo
-worker para que la salud fuese inequívoca. Como worker puro, además, el
-healthcheck resulta **más fuerte** que un endpoint HTTP: el proceso refresca una
-clave de latido en Redis en cada vuelta del bucle y el chequeo mira esa clave,
-de modo que un bucle consumidor colgado se detecta. Un `/health` de Flask
-seguiría respondiendo con el consumidor muerto.
+dos responsabilidades en un contenedor. Como worker puro no necesita Flask ni
+expone endpoints HTTP. Las corridas comienzan después de levantar el stack
+controlado.
 
 **Pasos**
 
 1. `src/cotizador/config.py`: configuración leída del entorno a una dataclass
    inmutable — `COTIZADOR_ID`, `REDIS_URL`, `FAULT_MODE`, `TARIFARIO_VERSION`,
-   nombres de stream y prefijo de respuestas, TTL del latido.
+   nombres de stream y prefijo de respuestas.
 2. `src/cotizador/faults.py`: los nueve modos de §2.6, envolviendo el cálculo del
    dominio. Ningún modo duplica la fórmula: los que alteran la tabla construyen
    un `Tarifario` corrompido y llaman al mismo `pricing`.
@@ -508,29 +505,27 @@ seguiría respondiendo con el consumidor muerto.
    `grupo-{id}`, bucle `XREADGROUP` con `block` corto para poder atender
    `SIGTERM`, `LPUSH cot:resp:{correlation_id}` + `EXPIRE 60` (evita fugas si
    Votación ya se rindió) y `XACK` tras responder.
-4. `src/cotizador/health.py`: refresco del latido `cot:hb:{id}` con TTL, y el
-   comando que usa el healthcheck del contenedor.
-5. `src/cotizador/__main__.py`: arranque, logging estructurado y apagado limpio
+4. `src/cotizador/__main__.py`: arranque, logging estructurado y apagado limpio
    ante `SIGTERM`.
-6. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = carpeta del
+5. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = carpeta del
    servicio, usuario `10001` y `CMD` en forma exec.
-7. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
+6. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
    `cotizador-a`, `cotizador-b`, `cotizador-c` sobre **una sola imagen**, cada
    uno con su `COTIZADOR_ID` y su `FAULT_MODE`.
-8. Tests: unitarios de `faults.py` (cada modo altera la prima como dice §2.6) e
-   integración del consumidor contra el Redis del stack.
+7. Tests: unitarios de `faults.py` (cada modo produce el comportamiento de
+   §2.6), contratos, fórmula, tarifario y configuración del worker.
 
 **Validación**
 
 ```bash
 docker compose up -d --build cotizador-a cotizador-b cotizador-c
 docker compose exec cotizador-a id                 # uid=10001, no root
-docker compose ps                                  # los 3 healthy
+docker compose ps                                  # los 3 en ejecución
 ./scripts/api-calls/publicar-solicitud.sh          # publica el ejemplo canónico
 docker compose exec redis redis-cli LRANGE cot:resp:<correlation_id> 0 -1
 ```
 
-**Resultado esperado:** `uid=10001`; las tres réplicas `healthy`; la lista de
+**Resultado esperado:** `uid=10001`; las tres réplicas en ejecución; la lista de
 respuestas contiene **exactamente 3 elementos**, con `cotizador_id` `A`, `B` y
 `C`, y `prima_mensual = "90348.41"` en los tres.
 
@@ -689,7 +684,7 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 **Pasos**
 
 1. `scripts/experiment/inyectar.sh <replica> <modo>`: reinicia una réplica con su
-   `FAULT_MODE` y espera a que quede `healthy`.
+   `FAULT_MODE` y comprueba que el proceso quede en ejecución.
 2. `scripts/experiment/carga.js` (k6): 500 cotizaciones/min sostenidas, entradas
    variadas (edad, suma, plazo, canal) para no medir siempre el mismo camino.
 3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra el p95 limpio.

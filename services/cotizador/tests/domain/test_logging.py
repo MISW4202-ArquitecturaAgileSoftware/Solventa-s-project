@@ -3,7 +3,7 @@
 import json
 import logging
 
-from cotizador.common.logging_ import configurar, contexto_correlacion
+from cotizador.structured_logging import configurar, contexto_correlacion
 
 
 def test_la_linea_es_json_con_correlation_id(capsys) -> None:  # type: ignore[no-untyped-def]

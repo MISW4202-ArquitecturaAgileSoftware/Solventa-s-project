@@ -1,4 +1,4 @@
-"""Cálculo de la prima y reglas de validez del resultado.
+"""Cálculo determinista de la prima.
 
 Determinismo, en el orden en que importa:
 
@@ -12,12 +12,11 @@ Determinismo, en el orden en que importa:
    diccionario.
 """
 
-from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from cotizador.common import tarifario as tarifario_mod
-from cotizador.common.contracts import (
+from cotizador import tarifario as tarifario_mod
+from cotizador.contracts import (
     EDAD_MAX,
     EDAD_MIN,
     VIGENCIA_DIAS,
@@ -26,24 +25,9 @@ from cotizador.common.contracts import (
     ResultadoCotizacion,
     SolicitudCotizacion,
 )
-from cotizador.common.errors import ErrorValidacion
+from cotizador.errors import ErrorValidacion
 
 CENTAVO = Decimal("0.01")
-
-# Cotas del cociente prima_mensual / suma_asegurada. Fuera de ellas el resultado
-# es estructuralmente imposible, sin necesidad de comparar con otras réplicas:
-# es la vía de detección que funciona incluso con una sola respuesta.
-RATIO_MIN = Decimal("0.00005")
-RATIO_MAX = Decimal("0.02")
-
-
-@dataclass(frozen=True, slots=True)
-class Violacion:
-    """Incumplimiento de una regla de validez del resultado."""
-
-    regla: str
-    detalle: str
-
 
 def redondear(valor: Decimal) -> Decimal:
     """Único punto de redondeo del sistema."""
@@ -122,48 +106,3 @@ def calcular_con_tabla(
             margen=tabla.margen,
         ),
     )
-
-
-def validar(
-    resultado: ResultadoCotizacion,
-    solicitud: SolicitudCotizacion,
-    tarifario_esperado: str = tarifario_mod.VERSION_VIGENTE,
-) -> list[Violacion]:
-    """Reglas de validez del plan (§2.4).
-
-    Devuelve la lista de incumplimientos; vacía significa resultado válido. No
-    lanza excepciones: Votación necesita descartar réplicas una a una, no abortar.
-    """
-    violaciones: list[Violacion] = []
-
-    if resultado.prima_mensual <= 0:
-        violaciones.append(Violacion("prima_positiva", f"prima_mensual={resultado.prima_mensual}"))
-
-    if solicitud.suma_asegurada > 0:
-        ratio = resultado.prima_mensual / solicitud.suma_asegurada
-        if not RATIO_MIN <= ratio <= RATIO_MAX:
-            violaciones.append(
-                Violacion(
-                    "ratio_prima_suma",
-                    f"ratio={ratio:.8f} fuera de [{RATIO_MIN}, {RATIO_MAX}]",
-                )
-            )
-
-    anual_esperada = redondear(resultado.prima_mensual * 12)
-    if resultado.prima_anual != anual_esperada:
-        violaciones.append(
-            Violacion(
-                "coherencia_anual",
-                f"prima_anual={resultado.prima_anual}, esperada {anual_esperada}",
-            )
-        )
-
-    if resultado.tarifario_version != tarifario_esperado:
-        violaciones.append(
-            Violacion(
-                "tarifario_vigente",
-                f"usó {resultado.tarifario_version}, se esperaba {tarifario_esperado}",
-            )
-        )
-
-    return violaciones

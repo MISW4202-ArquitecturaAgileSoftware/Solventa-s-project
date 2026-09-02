@@ -20,12 +20,12 @@ UMBRAL_RETARDO_MS = 300
 #: Qué mecanismo debe delatar cada modo. Sirve para comprobar que la detección
 #: ocurrió por la vía prevista y no por casualidad.
 VIA = {
-    "premium_offset": "divergencia de hash",
-    "factor_skip": "divergencia de hash",
-    "rounding_drift": "divergencia de hash",
-    "rate_table_stale": "regla de validez",
-    "out_of_range": "regla de validez",
-    "silent_zero": "regla de validez",
+    "premium_offset": "divergencia de resultado",
+    "factor_skip": "divergencia de resultado",
+    "rounding_drift": "divergencia de resultado",
+    "rate_table_stale": "divergencia de resultado",
+    "out_of_range": "divergencia de resultado",
+    "silent_zero": "divergencia de resultado",
     "slow": "réplica no responde",
     "crash": "réplica no responde",
 }

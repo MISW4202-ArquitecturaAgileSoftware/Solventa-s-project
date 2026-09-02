@@ -1,22 +1,19 @@
-"""Validación del payload de entrada (§1.2) e ida y vuelta de la serialización."""
+"""Entrada de solicitudes y serialización de respuestas del Cotizador."""
 
 import json
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from cotizador.common.contracts import (
-    ResultadoCotizacion,
+from cotizador.contracts import (
     SobreRespuesta,
     SobreSolicitud,
     SolicitudCotizacion,
-    ahora_utc,
 )
-from cotizador.common.errors import ErrorValidacion
-from cotizador.common.pricing import calcular
+from cotizador.errors import ErrorValidacion
+from cotizador.pricing import calcular
 
 from .conftest import FECHA_CALCULO
 
@@ -46,11 +43,6 @@ def test_el_ejemplo_del_repositorio_es_valido() -> None:
 
     assert solicitud.suma_asegurada == Decimal("250000000.00")
     assert calcular(solicitud, FECHA_CALCULO).prima_mensual == Decimal("90348.41")
-
-
-def test_ida_y_vuelta_conserva_la_solicitud() -> None:
-    original = SolicitudCotizacion.desde_dict(_valida())
-    assert SolicitudCotizacion.desde_dict(original.a_dict()) == original
 
 
 def test_importe_como_numero_json_es_rechazado() -> None:
@@ -121,20 +113,24 @@ def test_edad_fuera_de_rango_se_rechaza_en_el_calculo() -> None:
         calcular(solicitud, FECHA_CALCULO)
 
 
-def test_ida_y_vuelta_del_sobre_de_solicitud() -> None:
-    sobre = SobreSolicitud(
-        correlation_id="01a05aa8-24a1-753e-b019-a0810d66a3f6",
-        emitido_en=ahora_utc(),
-        fecha_calculo=date(2026, 8, 31),
-        payload=SolicitudCotizacion.desde_dict(_valida()),
+def test_deserializa_el_sobre_de_solicitud() -> None:
+    sobre = SobreSolicitud.desde_dict(
+        {
+            "correlation_id": "01a05aa8-24a1-753e-b019-a0810d66a3f6",
+            "tipo": "cotizacion.solicitada",
+            "version": "1",
+            "emitido_en": "2026-08-31T12:00:00Z",
+            "fecha_calculo": "2026-08-31",
+            "payload": _valida(),
+        }
     )
-    ida = json.loads(json.dumps(sobre.a_dict()))
 
-    assert SobreSolicitud.desde_dict(ida) == sobre
+    assert sobre.fecha_calculo == FECHA_CALCULO
+    assert sobre.payload.suma_asegurada == Decimal("250000000.00")
 
 
-def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
-    from cotizador.common.contracts import EstadoRespuesta
+def test_serializa_el_sobre_de_respuesta() -> None:
+    from cotizador.contracts import EstadoRespuesta
 
     resultado = calcular(SolicitudCotizacion.desde_dict(_valida()), FECHA_CALCULO)
     sobre = SobreRespuesta(
@@ -144,13 +140,14 @@ def test_ida_y_vuelta_del_sobre_de_respuesta() -> None:
         duracion_ms=7,
         resultado=resultado,
     )
-    ida = json.loads(json.dumps(sobre.a_dict()))
+    serializado = json.loads(json.dumps(sobre.a_dict()))
 
-    assert SobreRespuesta.desde_dict(ida) == sobre
+    assert serializado["cotizador_id"] == "B"
+    assert serializado["resultado"]["prima_mensual"] == "90348.41"
 
 
 def test_sobre_de_respuesta_con_error_no_lleva_resultado() -> None:
-    from cotizador.common.contracts import EstadoRespuesta
+    from cotizador.contracts import EstadoRespuesta
 
     sobre = SobreRespuesta(
         correlation_id="01a05aa8-24a1-753e-b019-a0810d66a3f6",
@@ -159,34 +156,18 @@ def test_sobre_de_respuesta_con_error_no_lleva_resultado() -> None:
         duracion_ms=3,
         error="fallo inyectado: crash",
     )
-    ida = json.loads(json.dumps(sobre.a_dict()))
-    reconstruido = SobreRespuesta.desde_dict(ida)
+    serializado = json.loads(json.dumps(sobre.a_dict()))
 
-    assert reconstruido.resultado is None
-    assert reconstruido == sobre
+    assert serializado["resultado"] is None
+    assert serializado["error"] == "fallo inyectado: crash"
 
 
-def test_ida_y_vuelta_del_resultado() -> None:
+def test_serializa_el_resultado_completo() -> None:
     resultado = calcular(SolicitudCotizacion.desde_dict(_valida()), FECHA_CALCULO)
-    ida = json.loads(json.dumps(resultado.a_dict()))
+    serializado = json.loads(json.dumps(resultado.a_dict()))
 
-    assert ResultadoCotizacion.desde_dict(ida) == resultado
-
-
-@pytest.mark.parametrize("valor", ["ayer", "", "2026-13-45T99:99:99Z", "1788229562"])
-def test_instante_malformado_da_error_de_validacion(valor: str) -> None:
-    """Sin esto, un instante mal formado subiría como ValueError y el servicio
-    respondería 500 en lugar del 422 que exige el contrato."""
-    from cotizador.common.contracts import Incidente
-
-    dato = {
-        "correlation_id": "01a05aa8-24a1-753e-b019-a0810d66a3f6",
-        "tipo": "sin_quorum",
-        "detectado_en": valor,
-    }
-    with pytest.raises(ErrorValidacion) as excinfo:
-        Incidente.desde_dict(dato)
-    assert excinfo.value.campo == "detectado_en"
+    assert serializado["prima_mensual"] == "90348.41"
+    assert serializado["explicacion"]["factores"]["canal"] == "0.95"
 
 
 def test_campo_ausente_dice_que_es_obligatorio() -> None:

@@ -201,3 +201,40 @@ formará mayoría; Votación no conoce el cálculo para refutarla.
 - Con B y C en modo `crash`: respuesta `503`; el único valor disponible no se
   entrega por falta de quórum.
 - Tras restaurar las réplicas, el sistema vuelve a acuerdo 3 de 3.
+
+### 7. Cotizador reducido a un worker de cálculo
+
+#### Responsabilidad conservada
+
+Cada réplica mantiene un único recorrido: consume una solicitud desde Redis,
+calcula con su tarifario, aplica el modo de fallo configurado y publica la
+respuesta. Continúan siendo necesarios el cálculo determinista con `Decimal`,
+las tablas versionadas, los nueve modos —incluido `none`— y el apagado ordenado.
+
+#### Código retirado
+
+- Se eliminó la carpeta `common`; contratos, errores, tarifario, pricing y
+  logging estructurado son módulos directos del Cotizador.
+- Se retiraron IDs, errores HTTP, estados de la cotización, incidentes y tipos
+  de consenso. El worker recibe el `correlation_id` y no ofrece una API HTTP.
+- Se eliminó `pricing.validar()`. El Cotizador valida la solicitud y los datos
+  necesarios para calcular, pero no descarta su propio resultado: hacerlo
+  ocultaría los fallos que el experimento debe entregar a Votación.
+- Se eliminó `health.py`, el latido en Redis, su configuración y el healthcheck
+  de la imagen. Las corridas comienzan después de que `docker compose up` haya
+  levantado los procesos del stack controlado.
+- El contrato implementa solo las direcciones usadas: recibe y deserializa el
+  sobre de solicitud; construye y serializa el sobre de respuesta.
+
+Los modos de fallo se mantienen porque forman parte de las corridas del
+experimento. Votación no conoce su implementación y compara el resultado
+funcional completo producido por cada réplica.
+
+#### Validación
+
+- 87 pruebas del Cotizador y 154 pruebas del repositorio aprobadas.
+- Imagen reconstruida; las réplicas A, B y C quedaron en ejecución.
+- Sin fallas: acuerdo 3 de 3 y prima mensual `90348.41`.
+- Con `FAULT_B=factor_skip`: acuerdo 2 de 3, B detectado como divergente y el
+  cliente recibió el resultado sano.
+- B fue restaurado a `FAULT_MODE=none` después de la comprobación.

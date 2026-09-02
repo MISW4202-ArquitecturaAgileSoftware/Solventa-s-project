@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from cotizador import faults
-from cotizador.common.contracts import ResultadoCotizacion, SolicitudCotizacion
+from cotizador.contracts import ResultadoCotizacion, SolicitudCotizacion
 
 # Declarados aquí y no importados de conftest: añadir __init__.py a este
 # directorio crearía un segundo paquete llamado `tests` y chocaría con el de
@@ -91,7 +91,7 @@ def test_la_prima_desviada_conserva_la_coherencia_anual(
 ) -> None:
     """Si la anual quedara descuadrada, `coherencia_anual` delataría el fallo
     por sí sola y `premium_offset` dejaría de probar la vía de divergencia."""
-    from cotizador.common.pricing import redondear
+    from cotizador.pricing import redondear
 
     roto = _calcular(solicitud, "premium_offset")
     assert roto.prima_anual == redondear(roto.prima_mensual * 12)

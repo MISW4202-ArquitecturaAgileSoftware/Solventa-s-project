@@ -10,8 +10,8 @@ desvían el importe operan sobre el resultado ya calculado. Dos copias de la
 fórmula divergirían por mantenimiento y el experimento acabaría midiendo el bug
 equivocado.
 
-Votación no conoce estas alteraciones: únicamente compara la prima mensual que
-devuelve cada réplica.
+Votación no conoce estas alteraciones: únicamente compara el resultado funcional
+completo que devuelve cada réplica.
 """
 
 import time
@@ -20,9 +20,9 @@ from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
-from cotizador.common import tarifario as tarifario_mod
-from cotizador.common.contracts import ResultadoCotizacion, SolicitudCotizacion
-from cotizador.common.pricing import CENTAVO, calcular_con_tabla, redondear
+from cotizador import tarifario as tarifario_mod
+from cotizador.contracts import ResultadoCotizacion, SolicitudCotizacion
+from cotizador.pricing import CENTAVO, calcular_con_tabla, redondear
 
 
 class ModoFallo(StrEnum):
