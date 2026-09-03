@@ -4,9 +4,8 @@ services:
   gestion-errores:
     image: solventa/gestion-errores:${TAG:?falta TAG en .env}
     build:
-      # Contexto = raíz del repositorio: la imagen necesita libs/solventa-common.
-      context: ../..
-      dockerfile: services/gestion-errores/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     networks:
       # backend: por donde lo llama Votación.
@@ -22,14 +21,7 @@ services:
       - incidentes:/datos
     environment:
       RUTA_INCIDENTES: /datos/incidentes.jsonl
-      CAPACIDAD_COLA: ${CAPACIDAD_COLA:-10000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).status==200 else 1)"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
 
 networks:
   backend:

@@ -12,15 +12,9 @@ class Config:
     ruta_incidentes: Path
     log_level: str
 
-    #: Tope de la cola en memoria del escritor. Si se llena, encolar falla en
-    #: vez de bloquear: hacer esperar a Votación consumiría su presupuesto de
-    #: latencia, que es justo lo que ASR-12 mide.
-    capacidad_cola: int
-
 
 def desde_entorno() -> Config:
     return Config(
         ruta_incidentes=Path(os.environ.get("RUTA_INCIDENTES", "/datos/incidentes.jsonl")),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
-        capacidad_cola=int(os.environ.get("CAPACIDAD_COLA", "10000")),
     )
