@@ -39,10 +39,5 @@ COPY --link src /app/src
 WORKDIR /app
 USER 10001
 
-# Comprueba que el BUCLE CONSUMIDOR gira, no que un puerto acepte conexiones:
-# el worker refresca una clave de latido con TTL en cada vuelta.
-HEALTHCHECK --interval=5s --timeout=3s --start-period=10s --retries=3 \
-    CMD ["python", "-m", "cotizador.health"]
-
 # Forma exec: el proceso es PID 1 y recibe SIGTERM directamente.
 CMD ["python", "-m", "cotizador"]

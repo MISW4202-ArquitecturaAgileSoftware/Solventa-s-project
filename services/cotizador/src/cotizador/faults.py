@@ -10,9 +10,8 @@ desvían el importe operan sobre el resultado ya calculado. Dos copias de la
 fórmula divergirían por mantenimiento y el experimento acabaría midiendo el bug
 equivocado.
 
-Los modos se reparten en tres familias según qué mecanismo de detección
-ejercitan, y esa separación es deliberada: si todos fuesen detectables por las
-reglas de rango, la votación no haría falta.
+Votación no conoce estas alteraciones: únicamente compara el resultado funcional
+completo que devuelve cada réplica.
 """
 
 import time
@@ -21,9 +20,9 @@ from datetime import date
 from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 
-from cotizador.common import tarifario as tarifario_mod
-from cotizador.common.contracts import ResultadoCotizacion, SolicitudCotizacion
-from cotizador.common.pricing import CENTAVO, calcular_con_tabla, redondear
+from cotizador import tarifario as tarifario_mod
+from cotizador.contracts import ResultadoCotizacion, SolicitudCotizacion
+from cotizador.pricing import CENTAVO, calcular_con_tabla, redondear
 
 
 class ModoFallo(StrEnum):
@@ -45,8 +44,7 @@ class FalloInyectado(Exception):
 #: Modos que NO alteran el resultado, solo el comportamiento temporal.
 MODOS_TEMPORALES = frozenset({ModoFallo.SLOW, ModoFallo.CRASH})
 
-#: Desvío de `premium_offset`: ±15 % cae dentro de las cotas de ratio, así que
-#: ninguna regla estructural puede verlo. Solo lo delata la divergencia de hash.
+#: Desvío de `premium_offset` para producir una prima mensual diferente.
 OFFSET = Decimal("1.15")
 FACTOR_DESORBITADO = Decimal("500")
 RETARDO_SLOW_S = 0.4
@@ -55,9 +53,8 @@ RETARDO_SLOW_S = 0.4
 def _con_prima(resultado: ResultadoCotizacion, prima_mensual: Decimal) -> ResultadoCotizacion:
     """Sustituye la prima manteniendo coherente la anual.
 
-    Mantener la coherencia importa: si la anual quedara descuadrada, la regla
-    `coherencia_anual` detectaría el fallo por sí sola y `premium_offset`
-    dejaría de servir para probar la detección por divergencia.
+    La prima anual acompaña el valor alterado para mantener consistente la
+    respuesta producida por la réplica.
     """
     return replace(
         resultado,
@@ -110,7 +107,7 @@ def calcular(
             return _con_prima(resultado, Decimal("0.00"))
         case ModoFallo.ROUNDING_DRIFT:
             # Trunca a pesos enteros en vez de redondear a centavos: un error de
-            # centavos, invisible a simple vista y evidente para el hash.
+            # centavos, diferente al valor de las réplicas sanas.
             truncada = resultado.prima_mensual.quantize(Decimal("1"), rounding=ROUND_DOWN).quantize(
                 CENTAVO
             )

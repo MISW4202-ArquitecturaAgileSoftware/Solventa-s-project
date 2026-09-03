@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from cotizador.common.contracts import (
+from cotizador.contracts import (
     Asegurado,
     Canal,
     Genero,

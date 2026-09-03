@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 
-from cotizador.common.contracts import Canal
-from cotizador.common.errors import ErrorValidacion, TarifarioDesconocido
+from cotizador.contracts import Canal
+from cotizador.errors import ErrorValidacion, TarifarioDesconocido
 
 VERSION_VIGENTE = "2026.02"
 VERSION_ANTERIOR = "2025.11"
@@ -121,7 +121,3 @@ def obtener(version: str) -> Tarifario:
         return _TARIFARIOS[version]
     except KeyError as err:
         raise TarifarioDesconocido(f"no existe el tarifario {version!r}") from err
-
-
-def tasa_base_mil(edad: int, version: str = VERSION_VIGENTE) -> Decimal:
-    return obtener(version).tasa_base_mil(edad)
