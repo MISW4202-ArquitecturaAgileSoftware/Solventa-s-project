@@ -3,10 +3,82 @@
   "tipo": "divergencia_resultado",
   "detectado_en": "2026-08-31T20:41:07.512Z",
   "replicas_divergentes": ["B"],
-  "valor_consenso": "90348.41",
   "valores_recibidos": [
-    { "cotizador_id": "A", "prima_mensual": "90348.41", "resultado_hash": "9f2a" },
-    { "cotizador_id": "B", "prima_mensual": "103900.67", "resultado_hash": "c41d" },
-    { "cotizador_id": "C", "prima_mensual": "90348.41", "resultado_hash": "9f2a" }
-  ]
+    {
+      "cotizador_id": "A",
+      "resultado": {
+        "moneda": "COP",
+        "suma_asegurada": "250000000.00",
+        "prima_mensual": "90348.41",
+        "prima_anual": "1084180.92",
+        "plazo_meses": 240,
+        "vigencia_dias": 15,
+        "tarifario_version": "2026.02",
+        "explicacion": {
+          "edad_calculada": 38,
+          "tasa_base_mil": "0.26",
+          "factores": {
+            "fumador": "1.00",
+            "clase_ocupacional": "1.12",
+            "plazo": "1.08",
+            "canal": "0.95"
+          },
+          "gasto_administrativo": "0.12",
+          "margen": "0.08"
+        }
+      },
+      "error": null
+    },
+    {
+      "cotizador_id": "B",
+      "resultado": {
+        "moneda": "COP",
+        "suma_asegurada": "250000000.00",
+        "prima_mensual": "103900.67",
+        "prima_anual": "1246808.04",
+        "plazo_meses": 240,
+        "vigencia_dias": 15,
+        "tarifario_version": "2026.02",
+        "explicacion": {
+          "edad_calculada": 38,
+          "tasa_base_mil": "0.26",
+          "factores": {
+            "fumador": "1.00",
+            "clase_ocupacional": "1.12",
+            "plazo": "1.08",
+            "canal": "0.95"
+          },
+          "gasto_administrativo": "0.12",
+          "margen": "0.08"
+        }
+      },
+      "error": null
+    },
+    {
+      "cotizador_id": "C",
+      "resultado": {
+        "moneda": "COP",
+        "suma_asegurada": "250000000.00",
+        "prima_mensual": "90348.41",
+        "prima_anual": "1084180.92",
+        "plazo_meses": 240,
+        "vigencia_dias": 15,
+        "tarifario_version": "2026.02",
+        "explicacion": {
+          "edad_calculada": 38,
+          "tasa_base_mil": "0.26",
+          "factores": {
+            "fumador": "1.00",
+            "clase_ocupacional": "1.12",
+            "plazo": "1.08",
+            "canal": "0.95"
+          },
+          "gasto_administrativo": "0.12",
+          "margen": "0.08"
+        }
+      },
+      "error": null
+    }
+  ],
+  "detalle": "B devolvió un resultado distinto al acordado por A y C"
 }

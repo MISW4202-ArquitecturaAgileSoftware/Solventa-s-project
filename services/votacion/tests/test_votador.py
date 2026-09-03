@@ -194,12 +194,37 @@ def test_los_valores_recibidos_quedan_en_la_evidencia(
         [respuesta("A", sano), respuesta("B", mala), respuesta("C", sano)]
     )
 
-    por_replica = {v.cotizador_id: v.prima_mensual for v in veredicto.valores_recibidos}
+    por_replica = {
+        valor.cotizador_id: (
+            valor.resultado.prima_mensual if valor.resultado is not None else None
+        )
+        for valor in veredicto.valores_recibidos
+    }
     assert por_replica == {
         "A": Decimal("90348.41"),
         "B": Decimal("103900.67"),
         "C": Decimal("90348.41"),
     }
+
+
+def test_el_error_de_una_replica_queda_en_la_evidencia(
+    sano: ResultadoCotizacion,
+) -> None:
+    fallida = SobreRespuesta(
+        correlation_id=CORRELATION_ID,
+        cotizador_id="B",
+        estado=EstadoRespuesta.ERROR,
+        duracion_ms=2,
+        error="cálculo fallido",
+    )
+
+    veredicto = _resolver([respuesta("A", sano), fallida, respuesta("C", sano)])
+    evidencia_b = next(
+        valor for valor in veredicto.valores_recibidos if valor.cotizador_id == "B"
+    )
+
+    assert evidencia_b.resultado is None
+    assert evidencia_b.error == "cálculo fallido"
 
 
 @pytest.mark.parametrize(

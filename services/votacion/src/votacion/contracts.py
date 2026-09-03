@@ -454,20 +454,14 @@ class ValorRecibido:
     """Lo que respondió una réplica concreta, tal como Votación lo vio."""
 
     cotizador_id: str
-    prima_mensual: Decimal | None = None
-
-    @classmethod
-    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
-        crudo_prima = dato.get("prima_mensual")
-        return cls(
-            cotizador_id=_leer_texto(dato, "cotizador_id"),
-            prima_mensual=Decimal(crudo_prima) if isinstance(crudo_prima, str) else None,
-        )
+    resultado: ResultadoCotizacion | None = None
+    error: str | None = None
 
     def a_dict(self) -> dict[str, Any]:
         return {
             "cotizador_id": self.cotizador_id,
-            "prima_mensual": str(self.prima_mensual) if self.prima_mensual is not None else None,
+            "resultado": self.resultado.a_dict() if self.resultado is not None else None,
+            "error": self.error,
         }
 
 
@@ -484,31 +478,8 @@ class Incidente:
     tipo: TipoIncidente
     detectado_en: datetime
     replicas_divergentes: tuple[str, ...] = ()
-    valor_consenso: Decimal | None = None
     valores_recibidos: tuple[ValorRecibido, ...] = ()
     detalle: str | None = None
-
-    @classmethod
-    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
-        crudo_divergentes = dato.get("replicas_divergentes", [])
-        if not isinstance(crudo_divergentes, list):
-            raise ErrorValidacion("replicas_divergentes", "debe ser una lista")
-        crudo_valores = dato.get("valores_recibidos", [])
-        if not isinstance(crudo_valores, list):
-            raise ErrorValidacion("valores_recibidos", "debe ser una lista")
-        crudo_consenso = dato.get("valor_consenso")
-        crudo_detalle = dato.get("detalle")
-        return cls(
-            correlation_id=_leer_texto(dato, "correlation_id"),
-            tipo=_leer_enum(dato, "tipo", TipoIncidente),
-            detectado_en=_leer_instante(dato, "detectado_en"),
-            replicas_divergentes=tuple(str(r) for r in crudo_divergentes),
-            valor_consenso=(Decimal(crudo_consenso) if isinstance(crudo_consenso, str) else None),
-            valores_recibidos=tuple(
-                ValorRecibido.desde_dict(v) for v in crudo_valores if isinstance(v, Mapping)
-            ),
-            detalle=crudo_detalle if isinstance(crudo_detalle, str) else None,
-        )
 
     def a_dict(self) -> dict[str, Any]:
         return {
@@ -516,9 +487,6 @@ class Incidente:
             "tipo": self.tipo.value,
             "detectado_en": iso_utc(self.detectado_en),
             "replicas_divergentes": list(self.replicas_divergentes),
-            "valor_consenso": (
-                str(self.valor_consenso) if self.valor_consenso is not None else None
-            ),
             "valores_recibidos": [v.a_dict() for v in self.valores_recibidos],
             "detalle": self.detalle,
         }

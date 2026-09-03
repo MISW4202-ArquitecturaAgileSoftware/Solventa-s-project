@@ -2,7 +2,7 @@
 
 Implementa la táctica de votación del experimento. Publica una solicitud en
 Redis, reúne una respuesta diferente por cotizador y entrega un resultado solo
-cuando al menos dos primas mensuales coinciden.
+cuando al menos dos resultados completos coinciden exactamente.
 
 ## Flujo
 
@@ -33,6 +33,20 @@ de entregar un valor degradado sin segunda opinión.
 La táctica supone que como máximo una de las tres réplicas falla. Si dos
 cotizadores entregan el mismo valor incorrecto, ese valor formará mayoría; un
 servicio de votación puro no conoce la fórmula para determinar lo contrario.
+
+## Respuestas HTTP
+
+- `200 OK`: existe mayoría de dos resultados completos y se entrega la
+  cotización acordada.
+- `422 Unprocessable Content`: la solicitud no cumple el contrato de entrada.
+- `503 Service Unavailable`: llegaron respuestas, pero ninguna alcanzó el
+  quórum; no es un error interno del servidor.
+- `504 Gateway Timeout`: ninguna réplica entregó una respuesta utilizable
+  dentro del tiempo disponible.
+
+Cuando detecta una divergencia, Votación reporta a Gestión de Errores el
+resultado completo o el error observado en cada réplica. El registro confirma
+la persistencia con `201 Created`.
 
 ## Desarrollo
 

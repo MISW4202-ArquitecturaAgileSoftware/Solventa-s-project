@@ -15,6 +15,16 @@ Todo el código requerido para construir y probar la imagen vive en esta carpeta
 Expone `POST /v1/incidentes`, `GET /v1/incidentes`, `GET /v1/incidentes/reporte`
 y `GET /v1/metricas`.
 
+`POST /v1/incidentes` recibe, por cada cotizador, su `resultado` completo o el
+mensaje de `error`. Guarda la evidencia antes de responder:
+
+- `201 Created`: el incidente quedó persistido en el archivo JSONL.
+- `422 Unprocessable Content`: el cuerpo no cumple el contrato del incidente.
+
+Los endpoints de consulta responden `200 OK`. El envío no bloquea la respuesta
+al cliente de cotización porque Votación lo ejecuta en segundo plano; Gestión
+de Errores, en cambio, solo confirma `201` después de escribir la evidencia.
+
 ## Reporte HTML
 
 `GET /v1/incidentes/reporte` devuelve el mismo histórico que `GET /v1/incidentes`,

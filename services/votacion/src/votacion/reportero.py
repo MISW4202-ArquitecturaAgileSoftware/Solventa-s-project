@@ -45,7 +45,7 @@ class Reportero:
             with urllib.request.urlopen(
                 peticion, timeout=self._config.timeout_reporte_s
             ) as respuesta:
-                if respuesta.status != 202:
+                if respuesta.status != 201:
                     raise RuntimeError(f"estado inesperado {respuesta.status}")
         except (urllib.error.URLError, TimeoutError, RuntimeError) as err:
             # No se reintenta en línea: un GestorErrores caído no puede

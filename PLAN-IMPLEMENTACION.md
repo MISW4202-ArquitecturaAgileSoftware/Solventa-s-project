@@ -579,17 +579,18 @@ antes que Votación, que es quien lo llama.
 **Pasos**
 
 1. `POST /v1/incidentes` con el envelope de incidente: `correlation_id`,
-   `tipo` (`divergencia_resultado` \| `regla_de_validez` \| `sin_quorum` \|
-   `replica_no_responde`), `replicas_divergentes`, `valor_consenso`,
-   `valores_recibidos`, `detectado_en`.
+   `tipo` (`divergencia_resultado` \| `sin_quorum` \|
+   `replica_no_responde`), `replicas_divergentes`, `valores_recibidos`,
+   `detectado_en` y `detalle`. Cada valor recibido conserva el resultado
+   completo o el error observado en la réplica.
 2. Persistencia: `append` a JSONL en un volumen nombrado. Suficiente y auditable
    para el experimento; una base de datos aquí sería andamiaje.
 3. `GET /v1/incidentes?correlation_id=...` para las aserciones del experimento.
 4. `GET /v1/metricas`: contadores de incidentes por tipo — de aquí sale el
    numerador del ≥99 % de ASR-11.
-5. Endpoint **no bloqueante para el que reporta**: responde `202 Accepted` y
-   escribe en background. Votación nunca debe esperar a este servicio: eso
-   consumiría presupuesto de latencia de ASR-12.
+5. Persiste antes de responder `201 Created`, para que la confirmación signifique
+   que la evidencia ya existe. Votación hace este POST en un hilo de segundo
+   plano y por eso el cliente de cotización no espera al Gestor de Errores.
 6. `Dockerfile` + `docker-compose.yaml` (red `backend` únicamente).
 
 **Validación**
@@ -600,7 +601,7 @@ curl -s -XPOST localhost:8003/v1/incidentes -d @docs/ejemplos/incidente.json \
 curl -s localhost:8003/v1/metricas | jq
 ```
 
-**Resultado esperado:** `202` en **menos de 20 ms**; `/v1/metricas` muestra
+**Resultado esperado:** `201`; `/v1/metricas` muestra
 `divergencia_resultado: 1`; el JSONL del volumen contiene una línea con el
 `correlation_id` enviado.
 
