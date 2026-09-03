@@ -6,7 +6,7 @@ from typing import Any
 from flask import Blueprint, Response, current_app, jsonify, request
 from redis import Redis
 
-from solventa_common.contracts import (
+from votacion.contracts import (
     EstadoCotizacion,
     Incidente,
     SobreSolicitud,
@@ -14,13 +14,13 @@ from solventa_common.contracts import (
     ahora_utc,
     iso_utc,
 )
-from solventa_common.errors import (
+from votacion.errors import (
     ErrorSinConsenso,
     ErrorTimeoutCotizacion,
     ErrorValidacion,
 )
-from solventa_common.ids import es_correlation_id_valido, nuevo_correlation_id
-from solventa_common.logging_ import contexto_correlacion, fijar_correlation_id
+from votacion.ids import es_correlation_id_valido, nuevo_correlation_id
+from votacion.structured_logging import contexto_correlacion, fijar_correlation_id
 from votacion import despachador, votador
 from votacion.config import Config
 from votacion.reportero import Reportero
@@ -28,7 +28,6 @@ from votacion.reportero import Reportero
 log = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
-salud = Blueprint("salud", __name__)
 
 
 def _config() -> Config:
@@ -75,28 +74,23 @@ def cotizar() -> tuple[Response, int]:
     solicitud = SolicitudCotizacion.desde_dict(cuerpo)
 
     with contexto_correlacion(correlation_id):
-        # Normalización ANTES del fan-out: la fecha de cálculo y la versión del
-        # tarifario se fijan aquí, una sola vez. Si cada réplica las resolviera
-        # por su cuenta, una petición en el cambio de día produciría edades
-        # distintas y una divergencia falsa.
+        # La fecha se fija una sola vez antes del fan-out. Así una petición en
+        # el cambio de día no produce edades distintas entre réplicas.
         emitido_en = ahora_utc()
         sobre = SobreSolicitud(
             correlation_id=correlation_id,
             emitido_en=emitido_en,
             fecha_calculo=emitido_en.date(),
-            tarifario_version=config.tarifario_version,
             payload=solicitud,
         )
 
         cliente = _redis()
         despachador.publicar(cliente, config, sobre)
-        recoleccion = despachador.recolectar(cliente, config, correlation_id, solicitud)
+        recoleccion = despachador.recolectar(cliente, config, correlation_id)
         despachador.limpiar(cliente, config, correlation_id)
 
         veredicto = votador.resolver(
             recoleccion.respuestas,
-            solicitud,
-            tarifario_esperado=config.tarifario_version,
             quorum=config.quorum,
             replicas_esperadas=config.replicas_esperadas,
         )
@@ -178,32 +172,3 @@ def _respuesta_publica(
             "detalle": veredicto.detalle,
         }
     return cuerpo
-
-
-@salud.get("/health")
-def health() -> tuple[Response, int]:
-    return jsonify({"estado": "vivo"}), 200
-
-
-@salud.get("/ready")
-def ready() -> tuple[Response, int]:
-    """Readiness: además de vivo, con la cola alcanzable."""
-    try:
-        _redis().ping()
-        cola = True
-    except Exception:
-        cola = False
-    return jsonify({"estado": "listo" if cola else "no listo", "cola": cola}), (
-        200 if cola else 503
-    )
-
-
-@salud.get("/v1/metricas")
-def metricas() -> tuple[Response, int]:
-    reportero = _reportero()
-    return jsonify(
-        {
-            "incidentes_enviados": reportero.enviados,
-            "incidentes_fallidos": reportero.fallidos,
-        }
-    ), 200

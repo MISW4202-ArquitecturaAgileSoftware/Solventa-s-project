@@ -9,7 +9,6 @@ class Config:
     redis_url: str
     stream_solicitudes: str
     prefijo_respuestas: str
-    tarifario_version: str
     log_level: str
 
     #: Réplicas que se espera que respondan. Define el denominador de "faltan".
@@ -56,7 +55,6 @@ def desde_entorno() -> Config:
         redis_url=_requerida("REDIS_URL"),
         stream_solicitudes=os.environ.get("STREAM_SOLICITUDES", "cot:req"),
         prefijo_respuestas=os.environ.get("PREFIJO_RESPUESTAS", "cot:resp"),
-        tarifario_version=os.environ.get("TARIFARIO_VERSION", "2026.02"),
         log_level=os.environ.get("LOG_LEVEL", "INFO"),
         replicas_esperadas=int(os.environ.get("REPLICAS_ESPERADAS", "3")),
         quorum=int(os.environ.get("QUORUM", "2")),
