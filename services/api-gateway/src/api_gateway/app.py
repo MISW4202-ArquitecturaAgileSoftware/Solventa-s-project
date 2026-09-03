@@ -8,10 +8,10 @@ from flask import Flask, Response, jsonify, request
 from api_gateway.api import api, salud
 from api_gateway.config import Config, desde_entorno
 from api_gateway.limitador import Limitador
-from solventa_common import logging_
-from solventa_common.errors import ErrorSolventa, a_problem_json
-from solventa_common.ids import nuevo_correlation_id
-from solventa_common.logging_ import correlation_id_actual, fijar_correlation_id
+from api_gateway.common import logging_
+from api_gateway.common.errors import ErrorSolventa, a_problem_json
+from api_gateway.common.ids import nuevo_correlation_id
+from api_gateway.common.logging_ import correlation_id_actual, fijar_correlation_id
 
 log = logging.getLogger(__name__)
 
