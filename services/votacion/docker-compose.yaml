@@ -4,8 +4,8 @@ services:
   votacion:
     image: solventa/votacion:${TAG:?falta TAG en .env}
     build:
-      context: ../..
-      dockerfile: services/votacion/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
     networks:
       # data-votacion: para publicar en el stream y recoger las respuestas.
@@ -33,7 +33,6 @@ services:
       REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
       STREAM_SOLICITUDES: ${STREAM_SOLICITUDES:?falta STREAM_SOLICITUDES en .env}
       PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:?falta PREFIJO_RESPUESTAS en .env}
-      TARIFARIO_VERSION: ${TARIFARIO_VERSION:?falta TARIFARIO_VERSION en .env}
       REPLICAS_ESPERADAS: ${REPLICAS_ESPERADAS:?falta REPLICAS_ESPERADAS en .env}
       QUORUM: ${QUORUM:?falta QUORUM en .env}
       TIMEOUT_CONSENSO_MS: ${TIMEOUT_CONSENSO_MS:?falta TIMEOUT_CONSENSO_MS en .env}
@@ -42,12 +41,6 @@ services:
       EXPOSE_CONSENSUS: ${EXPOSE_CONSENSUS:-false}
       URL_GESTION_ERRORES: ${URL_GESTION_ERRORES:?falta URL_GESTION_ERRORES en .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2).status==200 else 1)"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
 
 networks:
   data-votacion:

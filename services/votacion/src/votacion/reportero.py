@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
-from solventa_common.contracts import Incidente
+from votacion.contracts import Incidente
 from votacion.config import Config
 
 log = logging.getLogger(__name__)
@@ -28,16 +28,6 @@ class Reportero:
         self._pool = ThreadPoolExecutor(
             max_workers=config.hilos_reporte, thread_name_prefix="reportero"
         )
-        self._fallidos = 0
-        self._enviados = 0
-
-    @property
-    def enviados(self) -> int:
-        return self._enviados
-
-    @property
-    def fallidos(self) -> int:
-        return self._fallidos
 
     def reportar(self, incidente: Incidente) -> None:
         """Encola el envío y vuelve de inmediato."""
@@ -57,12 +47,10 @@ class Reportero:
             ) as respuesta:
                 if respuesta.status != 202:
                     raise RuntimeError(f"estado inesperado {respuesta.status}")
-            self._enviados += 1
         except (urllib.error.URLError, TimeoutError, RuntimeError) as err:
             # No se reintenta en línea: un GestorErrores caído no puede
             # convertirse en presión sobre Votación. La pérdida queda contada y
-            # visible en /v1/metricas.
-            self._fallidos += 1
+            # visible en el log del servicio.
             log.error(
                 "no se pudo reportar el incidente",
                 extra={
