@@ -4,7 +4,7 @@ Generado por `scripts/experiment/reporte.py` a partir de los JSON de
 `scripts/experiment/resultados/`. Ningún número de este documento se
 escribe a mano.
 
-Fecha de la corrida: 2026-09-01T03:15:34+00:00
+Fecha de la corrida: 2026-09-03T02:28:37+00:00
 
 ---
 
@@ -14,18 +14,20 @@ Umbral: **≥ 99 %** de los cálculos erróneos inyectados, detectados.
 
 | Modo de fallo | Vía de detección esperada | Cotizaciones | Incidentes | Tasa |
 |---|---|---:|---:|---:|
-| `crash` | réplica no responde | 100 | 100 | 100.00 % |
-| `factor_skip` | divergencia de hash | 100 | 75 | 75.00 % |
-| `out_of_range` | regla de validez | 100 | 100 | 100.00 % |
-| `premium_offset` | divergencia de hash | 100 | 100 | 100.00 % |
-| `rate_table_stale` | regla de validez | 100 | 100 | 100.00 % |
-| `rounding_drift` | divergencia de hash | 100 | 100 | 100.00 % |
-| `silent_zero` | regla de validez | 100 | 100 | 100.00 % |
-| `slow` | réplica no responde | 100 | 100 | 100.00 % |
+| `crash` | réplica no responde | 1000 | 1000 | 100.00 % |
+| `factor_skip` | divergencia de resultado | 750 | 750 | 100.00 % |
+| `out_of_range` | divergencia de resultado | 1000 | 1000 | 100.00 % |
+| `premium_offset` | divergencia de resultado | 1000 | 1000 | 100.00 % |
+| `rate_table_stale` | divergencia de resultado | 1000 | 1000 | 100.00 % |
+| `rounding_drift` | divergencia de resultado | 1000 | 1000 | 100.00 % |
+| `silent_zero` | divergencia de resultado | 1000 | 1000 | 100.00 % |
+| `slow` | réplica no responde | 1000 | 1000 | 100.00 % |
 
-- Tasa global: **96.88 %** (775/800).
-- Peor modo: **75.00 %**.
-- Veredicto: **NO CUMPLE** (umbral 99 % en TODOS los modos).
+- Tasa global: **100.00 %** (7750/7750).
+- Peor modo: **100.00 %**.
+- Veredicto: **CUMPLE** (umbral 99 % en TODOS los modos).
+
+- `factor_skip`: 750 fallos efectivos de 1000 requests que alcanzaron Votación (el modo no altera todas las solicitudes).
 
 ## ASR-12 · Enmascaramiento del cálculo erróneo
 
@@ -34,16 +36,16 @@ Umbrales: retardo añadido **≤ 300 ms** sobre el p95 de la línea base, y
 
 | Corrida | n | tasa real | p50 | p95 | p99 | máx |
 |---|---:|---:|---:|---:|---:|---:|
-| A · línea base | 200 | 1205.0/min | 7.51 ms | 9.09 ms | 10.5 ms | 21.08 ms |
-| C · con fallo activo | 200 | 1204.8/min | 7.9 ms | 10.35 ms | 12.49 ms | 22.26 ms |
+| A · línea base | 5000 | 476.3/min | 62.38 ms | 89.36 ms | 97.89 ms | 111.0 ms |
+| C · con fallo activo | 5000 | 476.3/min | 71.05 ms | 97.79 ms | 106.03 ms | 118.45 ms |
 
-- Retardo añadido sobre el p95: **+1.26 ms** (base 9.09 ms → con fallo 10.35 ms).
+- Retardo añadido sobre el p95: **+8.43 ms** (base 89.36 ms → con fallo 97.79 ms).
 - Veredicto latencia: **CUMPLE** (umbral ≤ 300 ms).
 
-- Primas erróneas entregadas en la corrida C: **0** de 200 respuestas verificadas una a una contra el dominio.
+- Primas erróneas entregadas en la corrida C: **0** de 5000 respuestas verificadas una a una contra el dominio.
 - Veredicto integridad: **CUMPLE** (umbral: 0).
 
-- Estados devueltos en la corrida C: `{'COTIZADO': 200}`.
+- Estados devueltos en la corrida C: `{'COTIZADO': 5000}`.
 
 ---
 
