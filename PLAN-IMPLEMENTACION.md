@@ -52,13 +52,12 @@ los Streams de Redis, lo que hace depurable el experimento.
 
 | Identificador | Lo genera | Alcance | Para qué sirve |
 |---|---|---|---|
-| `request_id` | El socio, en `X-Request-Id` | La petición del socio | Trazabilidad del lado del socio; se conserva tal cual |
+| `request_id` | El cliente, en el cuerpo JSON | La petición del cliente | Trazabilidad del lado del cliente; es obligatorio y se conserva tal cual |
 | `correlation_id` | API Gateway (`uuid7`) | El journey completo | Une la solicitud con los 3 cálculos y con el veredicto |
 | `cotizador_id` | Cada réplica, de `COTIZADOR_ID` | Una réplica | Identifica quién produjo cada resultado (`A`, `B`, `C`) |
 | `resultado_hash` | Cada réplica | Un resultado | Comparación exacta en la votación |
 
-Si el socio no envía `X-Request-Id`, el gateway usa el `correlation_id` también
-como `request_id`. El `correlation_id` viaja en:
+El gateway rechaza las solicitudes sin `request_id`. El `correlation_id` viaja en:
 
 - la cabecera `X-Correlation-Id` de la respuesta,
 - el campo `correlation_id` de **todo** mensaje del envelope interno,
@@ -70,12 +69,11 @@ como `request_id`. El `correlation_id` viaja en:
 ```http
 POST /v1/cotizaciones HTTP/1.1
 Content-Type: application/json
-X-Partner-Id: banco-aliado-01          (obligatorio)
-X-Request-Id: 7f3c...                  (opcional)
 ```
 
 ```json
 {
+  "request_id": "solicitud-ejemplo-001",
   "producto": "vida_hipotecario",
   "moneda": "COP",
   "suma_asegurada": "250000000.00",
@@ -183,8 +181,8 @@ apagado, la divergencia sigue reportándose íntegra a `gestion-errores`.
 
 | Situación | HTTP | `type` |
 |---|:---:|---|
+| Falta `request_id` en la entrada al gateway | 400 | `request_id_required` |
 | Payload malformado o fuera de rango | 422 | `/errors/validacion` |
-| Falta `X-Partner-Id` | 401 | `/errors/socio-no-identificado` |
 | Sin quórum y sin valor confiable | 503 | `/errors/sin-consenso` |
 | Timeout del journey | 504 | `/errors/timeout-cotizacion` |
 
@@ -697,30 +695,27 @@ todos los casos, incluido `crash`.
 
 **Pasos**
 
-1. `POST /v1/cotizaciones` público: valida `X-Partner-Id`, genera el
-   `correlation_id` (`uuid7`) o adopta `X-Request-Id`, y reenvía a Votación.
+1. `POST /v1/cotizaciones` público: exige `request_id` en el JSON, genera el
+   `correlation_id` (`uuid7`) y reenvía a la URL de cotización configurada.
 2. Añade `X-Correlation-Id` a toda respuesta, incluidas las de error.
-3. **Filtra el bloque `consenso`** cuando `EXPOSE_CONSENSUS=false`.
-4. Traduce cualquier fallo de Votación a RFC 9457 (§1.3) sin filtrar detalles
-   internos.
-5. Timeout hacia Votación de 300 ms; único servicio conectado a la red `edge`.
-6. Rate limiting básico por `X-Partner-Id`.
+3. Propaga el cuerpo y el estado HTTP que devuelve el servicio interno.
+4. Devuelve `504` si vence el timeout y `503` si no puede conectarse.
+5. Registra `request_id`, `correlation_id`, estado y tiempo total en JSON.
+6. Es el único servicio conectado a la red `edge`.
 
 **Validación**
 
 ```bash
-curl -si -XPOST localhost:8000/v1/cotizaciones -H 'X-Partner-Id: banco-aliado-01' \
+curl -si -XPOST localhost:8000/v1/cotizaciones \
      -H 'content-type: application/json' -d @docs/ejemplos/solicitud.json | head -20
 curl -si -XPOST localhost:8000/v1/cotizaciones \
-     -H 'content-type: application/json' -d @docs/ejemplos/solicitud.json | head -5
-curl -s -XPOST localhost:8000/v1/cotizaciones -H 'X-Partner-Id: x' \
      -H 'content-type: application/json' -d '{"producto":"vida_hipotecario"}' | jq
 docker compose exec cotizador-a curl -s localhost:8000/health   # debe fallar
 ```
 
-**Resultado esperado:** `200` con `X-Correlation-Id` presente y **sin bloque
-`consenso`**; `401` con `problem+json` si falta `X-Partner-Id`; `422` con el
-campo ofensor nombrado en `detail`; y la última llamada **debe fallar por red**,
+**Resultado esperado:** `200` con `X-Correlation-Id`; `400` si falta
+`request_id`; propagación de los estados devueltos por el servicio interno; y
+la última llamada **debe fallar por red**,
 probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 ---

@@ -1,4 +1,5 @@
 {
+  "request_id": "solicitud-ejemplo-001",
   "producto": "vida_hipotecario",
   "moneda": "COP",
   "suma_asegurada": "250000000.00",
