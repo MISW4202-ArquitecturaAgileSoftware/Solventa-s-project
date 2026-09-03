@@ -15,7 +15,7 @@ from redis import Redis
 
 from cotizador import consumer
 from cotizador.config import desde_entorno
-from solventa_common import logging_
+from cotizador.common import logging_
 
 log = logging.getLogger(__name__)
 
