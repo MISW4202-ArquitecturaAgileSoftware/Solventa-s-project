@@ -19,10 +19,9 @@ x-cotizador-env: &cotizador-env
 x-cotizador: &cotizador
   image: solventa/cotizador:${TAG:?falta TAG en .env}
   build:
-    # Contexto = raíz del repositorio: la imagen necesita libs/solventa-common.
-    # Con `include`, las rutas relativas resuelven contra ESTE directorio.
-    context: ../..
-    dockerfile: services/cotizador/Dockerfile
+    # Cada cotizador se construye únicamente con el contenido de esta carpeta.
+    context: .
+    dockerfile: Dockerfile
   restart: unless-stopped
   networks:
     - data-cotizadores

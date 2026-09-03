@@ -15,14 +15,16 @@ from redis import Redis
 
 from cotizador import consumer
 from cotizador.config import desde_entorno
-from solventa_common import logging_
+from cotizador import structured_logging
 
 log = logging.getLogger(__name__)
 
 
 def main() -> int:
     config = desde_entorno()
-    logging_.configurar(f"cotizador-{config.cotizador_id.lower()}", config.log_level)
+    structured_logging.configurar(
+        f"cotizador-{config.cotizador_id.lower()}", config.log_level
+    )
 
     parar = threading.Event()
 

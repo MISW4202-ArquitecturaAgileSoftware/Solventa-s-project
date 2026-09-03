@@ -519,18 +519,15 @@ propósito: no sabe que existe la votación.
 
 **Por qué no lleva Flask.** El cotizador no recibe peticiones HTTP de nadie: su
 trabajo es `XREADGROUP` → calcular → `LPUSH`. Meterle un servidor web pondría
-dos responsabilidades en un contenedor y obligaría a fijar gunicorn a un solo
-worker para que la salud fuese inequívoca. Como worker puro, además, el
-healthcheck resulta **más fuerte** que un endpoint HTTP: el proceso refresca una
-clave de latido en Redis en cada vuelta del bucle y el chequeo mira esa clave,
-de modo que un bucle consumidor colgado se detecta. Un `/health` de Flask
-seguiría respondiendo con el consumidor muerto.
+dos responsabilidades en un contenedor. Como worker puro no necesita Flask ni
+expone endpoints HTTP. Las corridas comienzan después de levantar el stack
+controlado.
 
 **Pasos**
 
 1. `src/cotizador/config.py`: configuración leída del entorno a una dataclass
    inmutable — `COTIZADOR_ID`, `REDIS_URL`, `FAULT_MODE`, `TARIFARIO_VERSION`,
-   nombres de stream y prefijo de respuestas, TTL del latido.
+   nombres de stream y prefijo de respuestas.
 2. `src/cotizador/faults.py`: los nueve modos de §2.6, envolviendo el cálculo del
    dominio. Ningún modo duplica la fórmula: los que alteran la tabla construyen
    un `Tarifario` corrompido y llaman al mismo `pricing`.
@@ -538,31 +535,27 @@ seguiría respondiendo con el consumidor muerto.
    `grupo-{id}`, bucle `XREADGROUP` con `block` corto para poder atender
    `SIGTERM`, `LPUSH cot:resp:{correlation_id}` + `EXPIRE 60` (evita fugas si
    Votación ya se rindió) y `XACK` tras responder.
-4. `src/cotizador/health.py`: refresco del latido `cot:hb:{id}` con TTL, y el
-   comando que usa el healthcheck del contenedor.
-5. `src/cotizador/__main__.py`: arranque, logging estructurado y apagado limpio
+4. `src/cotizador/__main__.py`: arranque, logging estructurado y apagado limpio
    ante `SIGTERM`.
-6. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = raíz del
-   repo, `pip install ./libs/solventa-common`, usuario `10001`, `CMD` en forma
-   exec.
-7. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
+5. `Dockerfile` multi-stage sobre `python:3.14.6-slim`, `context` = carpeta del
+   servicio, usuario `10001` y `CMD` en forma exec.
+6. `services/cotizador/docker-compose.yaml`: anchor `x-cotizador` +
    `cotizador-a`, `cotizador-b`, `cotizador-c` sobre **una sola imagen**, cada
    uno con su `COTIZADOR_ID` y su `FAULT_MODE`.
-8. Tests: unitarios de `faults.py` (cada modo altera el resultado como dice
-   §2.6, y los que deben ser invisibles a las reglas de validez lo son) e
-   integración del consumidor contra el Redis del stack.
+7. Tests: unitarios de `faults.py` (cada modo produce el comportamiento de
+   §2.6), contratos, fórmula, tarifario y configuración del worker.
 
 **Validación**
 
 ```bash
 docker compose up -d --build cotizador-a cotizador-b cotizador-c
 docker compose exec cotizador-a id                 # uid=10001, no root
-docker compose ps                                  # los 3 healthy
+docker compose ps                                  # los 3 en ejecución
 ./scripts/api-calls/publicar-solicitud.sh          # publica el ejemplo canónico
 docker compose exec redis redis-cli LRANGE cot:resp:<correlation_id> 0 -1
 ```
 
-**Resultado esperado:** `uid=10001`; las tres réplicas `healthy`; la lista de
+**Resultado esperado:** `uid=10001`; las tres réplicas en ejecución; la lista de
 respuestas contiene **exactamente 3 elementos**, con `cotizador_id` `A`, `B` y
 `C`, `prima_mensual = "90348.41"` en los tres y **el mismo `resultado_hash`**.
 Un hash distinto entre réplicas sanas significa que el cálculo no es
@@ -727,7 +720,7 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 **Pasos**
 
 1. `scripts/experiment/inyectar.sh <replica> <modo>`: reinicia una réplica con su
-   `FAULT_MODE` y espera a que quede `healthy`.
+   `FAULT_MODE` y comprueba que el proceso quede en ejecución.
 2. `scripts/experiment/carga.py`: 500 cotizaciones/min sostenidas, entradas
    variadas (edad, suma, plazo, canal, fumador, clase ocupacional) para no medir
    siempre el mismo camino del tarifario, generadas de forma **determinista** a

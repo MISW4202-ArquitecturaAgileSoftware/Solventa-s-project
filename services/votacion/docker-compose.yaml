@@ -24,11 +24,11 @@ services:
       gestion-errores:
         condition: service_healthy
       cotizador-a:
-        condition: service_healthy
+        condition: service_started
       cotizador-b:
-        condition: service_healthy
+        condition: service_started
       cotizador-c:
-        condition: service_healthy
+        condition: service_started
     environment:
       REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
       STREAM_SOLICITUDES: ${STREAM_SOLICITUDES:?falta STREAM_SOLICITUDES en .env}

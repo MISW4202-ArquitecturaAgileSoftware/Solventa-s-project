@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reinicia una réplica con un modo de fallo y espera a que quede sana.
+# Reinicia una réplica con un modo de fallo y comprueba que quede en ejecución.
 #
 #   ./scripts/experiment/inyectar.sh b premium_offset
 #   ./scripts/experiment/inyectar.sh b none          # restaura
