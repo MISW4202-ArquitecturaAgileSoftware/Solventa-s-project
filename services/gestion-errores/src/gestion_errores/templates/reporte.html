@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reporte de incidentes · Gestor de Errores · Solventa</title>
+<style>
+  :root {
+    --tinta: #1f2933;
+    --tinta-suave: #52606d;
+    --linea: #d9dee3;
+    --fondo: #f4f6f8;
+    --papel: #ffffff;
+    --marca: #0b2545;
+    --marca-suave: #e8edf5;
+    --acento: #b8860b;
+    --alerta-fondo: #fdecea;
+    --alerta-tinta: #8a1c1c;
+    --alerta-linea: #f0b4b1;
+    --ok-fondo: #e6f4ea;
+    --ok-tinta: #1e6b3a;
+    --aviso-fondo: #fff4e0;
+    --aviso-tinta: #8a5a00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--tinta);
+    background: var(--fondo);
+  }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: .92em; }
+
+  /* --- Encabezado corporativo ------------------------------------------ */
+  .encabezado {
+    background: var(--marca);
+    color: #fff;
+    padding: 28px 40px;
+    border-bottom: 4px solid var(--acento);
+  }
+  .encabezado .marca { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; opacity: .85; }
+  .encabezado h1 { margin: 6px 0 0; font-size: 26px; font-weight: 600; }
+  .encabezado .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 13px; }
+  .encabezado .meta b { font-weight: 600; opacity: .75; margin-right: 6px; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 8px 40px 56px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--tinta-suave);
+    margin: 36px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--linea);
+  }
+
+  /* --- Resumen ejecutivo ----------------------------------------------- */
+  .resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .tarjeta { background: var(--papel); border: 1px solid var(--linea); border-radius: 6px; padding: 16px 20px; }
+  .tarjeta .titulo { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--tinta-suave); }
+  .tarjeta .cifra { font-size: 36px; font-weight: 600; color: var(--marca); margin-top: 2px; line-height: 1.1; }
+  .tarjeta ul { list-style: none; margin: 10px 0 0; padding: 0; }
+  .tarjeta li { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--linea); }
+  .tarjeta li b { font-weight: 600; }
+
+  /* --- Incidente ------------------------------------------------------- */
+  .incidente {
+    background: var(--papel);
+    border: 1px solid var(--linea);
+    border-radius: 6px;
+    margin-bottom: 20px;
+    break-inside: avoid;
+  }
+  .incidente-cabecera {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--marca-suave);
+    border-bottom: 1px solid var(--linea);
+  }
+  .incidente-cabecera .num { font-weight: 700; color: var(--marca); min-width: 2.5em; }
+  .incidente-cabecera .id { color: var(--tinta-suave); }
+  .incidente-cabecera time { margin-left: auto; color: var(--tinta-suave); white-space: nowrap; }
+
+  .etiqueta {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+    background: #e1e5ea;
+    color: var(--tinta);
+  }
+  .etiqueta--divergencia_resultado { background: var(--alerta-fondo); color: var(--alerta-tinta); }
+  .etiqueta--sin_quorum { background: var(--aviso-fondo); color: var(--aviso-tinta); }
+  .etiqueta--replica_no_responde { background: #e8e4f5; color: #4a3a8a; }
+
+  .dos-columnas { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0; }
+  .bloque { padding: 18px 20px; }
+  .dos-columnas .bloque + .bloque { border-left: 1px solid var(--linea); }
+  .bloque--ancho { border-top: 1px solid var(--linea); }
+  .bloque h3 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--acento);
+  }
+  .bloque .destacado { font-size: 17px; font-weight: 600; margin: 0 0 6px; color: var(--marca); }
+  .bloque p { margin: 0 0 8px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0; }
+  dt { color: var(--tinta-suave); font-size: 13px; }
+  dd { margin: 0; }
+  .nulo { color: var(--tinta-suave); font-style: italic; }
+
+  .chip {
+    display: inline-block;
+    padding: 1px 8px;
+    margin: 0 4px 4px 0;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #e1e5ea;
+  }
+  .chip--alerta { background: var(--alerta-fondo); color: var(--alerta-tinta); }
+  .chip--ok { background: var(--ok-fondo); color: var(--ok-tinta); }
+  .chip--aviso { background: var(--aviso-fondo); color: var(--aviso-tinta); }
+
+  /* --- Tablas ---------------------------------------------------------- */
+  .tabla-contenedor { overflow-x: auto; margin-top: 12px; }
+  .tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tabla caption { text-align: left; caption-side: top; font-weight: 600; padding: 0 0 8px; color: var(--tinta); }
+  .tabla th, .tabla td { padding: 7px 10px; border: 1px solid var(--linea); text-align: left; vertical-align: top; }
+  .tabla thead th { background: var(--marca-suave); font-weight: 600; }
+  .tabla tbody th { font-weight: 500; color: var(--tinta-suave); white-space: nowrap; }
+  .tabla .col--alerta { background: var(--alerta-fondo); color: var(--alerta-tinta); }
+  .fila--alerta td { background: #fff8f7; }
+  .fila--difiere th { border-left: 3px solid var(--alerta-tinta); color: var(--tinta); font-weight: 600; }
+  .celda--difiere { background: var(--alerta-fondo); color: var(--alerta-tinta); font-weight: 600; border-color: var(--alerta-linea); }
+
+  .vacio { background: var(--papel); border: 1px dashed var(--linea); border-radius: 6px; padding: 36px; text-align: center; color: var(--tinta-suave); }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--linea); font-size: 12px; color: var(--tinta-suave); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+  @media (max-width: 800px) {
+    .encabezado, main { padding-left: 18px; padding-right: 18px; }
+    .dos-columnas { grid-template-columns: 1fr; }
+    .dos-columnas .bloque + .bloque { border-left: 0; border-top: 1px solid var(--linea); }
+  }
+  @media print {
+    body { background: #fff; }
+    .encabezado { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .incidente { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header class="encabezado">
+  <div class="marca">Solventa · Gestor de Errores</div>
+  <h1>Reporte de incidentes de votación</h1>
+  <div class="meta">
+    <span><b>Generado</b><time datetime="{{ reporte.generado_en_iso }}">{{ reporte.generado_en_texto }}</time></span>
+    <span><b>Alcance</b>{% if reporte.filtro_correlation_id %}journey <code>{{ reporte.filtro_correlation_id }}</code>{% else %}incidentes más recientes{% endif %}</span>
+    <span><b>Registros</b>{{ reporte.total }}</span>
+  </div>
+</header>
+
+<main>
+  <h2>Resumen ejecutivo</h2>
+  <section class="resumen">
+    <div class="tarjeta">
+      <div class="titulo">Incidentes en el reporte</div>
+      <div class="cifra">{{ reporte.total }}</div>
+    </div>
+    <div class="tarjeta">
+      <div class="titulo">Por tipo de incidente</div>
+      {% if reporte.por_tipo %}
+      <ul>{% for etiqueta, cantidad in reporte.por_tipo %}<li><span>{{ etiqueta }}</span><b>{{ cantidad }}</b></li>{% endfor %}</ul>
+      {% else %}<p class="nulo">Sin datos</p>{% endif %}
+    </div>
+    <div class="tarjeta">
+      <div class="titulo">Por réplica divergente</div>
+      {% if reporte.por_replica %}
+      <ul>{% for replica, cantidad in reporte.por_replica %}<li><span>Réplica <code>{{ replica }}</code></span><b>{{ cantidad }}</b></li>{% endfor %}</ul>
+      {% else %}<p class="nulo">Ninguna réplica señalada</p>{% endif %}
+    </div>
+  </section>
+
+  <h2>Detalle de incidentes</h2>
+  {% if not reporte.incidentes %}
+  <div class="vacio">No hay incidentes registrados para el alcance solicitado.</div>
+  {% endif %}
+
+  {% for i in reporte.incidentes %}
+  <article class="incidente">
+    <header class="incidente-cabecera">
+      <span class="num">#{{ loop.index }}</span>
+      <span class="etiqueta etiqueta--{{ i.tipo }}">{{ i.tipo_etiqueta }}</span>
+      <code class="id" title="correlation_id">{{ i.correlation_id }}</code>
+      {% if i.detectado_en_iso %}<time datetime="{{ i.detectado_en_iso }}">{{ i.detectado_en_texto }}</time>{% else %}<time>{{ i.detectado_en_texto }}</time>{% endif %}
+    </header>
+
+    <div class="dos-columnas">
+      <section class="bloque">
+        <h3>Qué</h3>
+        <p class="destacado">{{ i.tipo_etiqueta }}</p>
+        <p>{{ i.tipo_explicacion }}</p>
+        <dl>
+          <dt>Réplicas divergentes</dt>
+          <dd>{% if i.replicas_divergentes %}{% for r in i.replicas_divergentes %}<span class="chip chip--alerta">{{ r }}</span>{% endfor %}{% else %}<span class="nulo">ninguna</span>{% endif %}</dd>
+          <dt>Campos con diferencias</dt>
+          <dd>{% if i.campos_divergentes %}{% for c in i.campos_divergentes %}<code class="chip">{{ c }}</code>{% endfor %}{% else %}<span class="nulo">ninguno</span>{% endif %}</dd>
+          <dt>Detalle de Votación</dt>
+          <dd>{% if i.detalle %}{{ i.detalle }}{% else %}<span class="nulo">sin detalle adicional</span>{% endif %}</dd>
+        </dl>
+      </section>
+
+      <section class="bloque">
+        <h3>Cuándo</h3>
+        <p class="destacado">{{ i.detectado_en_texto }}</p>
+        <p>Instante en que Votación cerró la votación y clasificó el incidente.</p>
+        <dl>
+          <dt>Marca ISO-8601</dt>
+          <dd>{% if i.detectado_en_iso %}<code>{{ i.detectado_en_iso }}</code>{% else %}<span class="nulo">no interpretable</span>{% endif %}</dd>
+          <dt>Journey</dt>
+          <dd><code>{{ i.correlation_id }}</code></dd>
+        </dl>
+      </section>
+    </div>
+
+    <section class="bloque bloque--ancho">
+      <h3>Cómo</h3>
+      {% if i.replicas %}
+      <p>Respuesta de cada réplica del cotizador tal como la recibió Votación, y comparación de los valores devueltos.</p>
+      <div class="tabla-contenedor">
+        <table class="tabla">
+          <caption>Estado de las réplicas</caption>
+          <thead><tr><th>Réplica</th><th>Estado</th><th>Observación</th></tr></thead>
+          <tbody>
+            {% for r in i.replicas %}
+            <tr{% if r.divergente %} class="fila--alerta"{% endif %}>
+              <td><code>{{ r.cotizador_id }}</code></td>
+              <td>
+                {% if r.respondio %}<span class="chip chip--ok">respondió</span>{% else %}<span class="chip chip--alerta">falló</span>{% endif %}
+                {% if r.divergente %}<span class="chip chip--aviso">fuera del consenso</span>{% endif %}
+              </td>
+              <td>{% if r.error %}{{ r.error }}{% else %}<span class="nulo">—</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if i.comparacion %}
+      <div class="tabla-contenedor">
+        <table class="tabla">
+          <caption>Valores devueltos por réplica (resaltado: difiere del valor mayoritario)</caption>
+          <thead>
+            <tr><th>Campo</th>{% for r in i.replicas %}<th{% if r.divergente %} class="col--alerta"{% endif %}>{{ r.cotizador_id }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for c in i.comparacion %}
+            <tr{% if c.difiere %} class="fila--difiere"{% endif %}>
+              <th scope="row">{{ c.nombre }}</th>
+              {% for celda in c.celdas %}<td{% if celda.difiere %} class="celda--difiere"{% endif %}>{{ celda.valor }}</td>{% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="nulo">Ninguna réplica devolvió un resultado comparable.</p>
+      {% endif %}
+      {% else %}
+      <p class="nulo">Votación no recibió respuesta de ninguna réplica.</p>
+      {% endif %}
+    </section>
+  </article>
+  {% endfor %}
+
+  <footer>
+    <span>Gestor de Errores · evidencia persistida en JSONL · numerador de ASR-11</span>
+    <span>Generado el {{ reporte.generado_en_texto }}</span>
+  </footer>
+</main>
+</body>
+</html>

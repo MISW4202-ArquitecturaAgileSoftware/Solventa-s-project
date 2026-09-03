@@ -11,11 +11,11 @@ from typing import Any
 
 from flask import Flask, Response, jsonify, request
 
+from gestion_errores import structured_logging
 from gestion_errores.api import api
 from gestion_errores.config import Config, desde_entorno
-from gestion_errores.repositorio import RepositorioIncidentes
-from gestion_errores import structured_logging
 from gestion_errores.errors import ErrorValidacion, a_problem_json
+from gestion_errores.repositorio import RepositorioIncidentes
 from gestion_errores.structured_logging import correlation_id_actual
 
 log = logging.getLogger(__name__)

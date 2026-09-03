@@ -47,9 +47,7 @@ def test_metricas_cuentan_por_tipo(cliente: FlaskClient, incidente: dict[str, An
     assert cuerpo["por_replica_divergente"]["B"] == 1
 
 
-def test_consulta_por_correlation_id(
-    cliente: FlaskClient, incidente: dict[str, Any]
-) -> None:
+def test_consulta_por_correlation_id(cliente: FlaskClient, incidente: dict[str, Any]) -> None:
     otro = incidente | {"correlation_id": "01a05aa8-0000-7000-8000-000000000000"}
     _reportar(cliente, incidente)
     _reportar(cliente, otro)
@@ -114,3 +112,69 @@ def test_una_linea_ilegible_no_invalida_el_historico(
         f.write('{"truncado": \n')
 
     assert cliente.get("/v1/metricas").get_json()["total"] == 1
+
+
+# --- Reporte HTML -----------------------------------------------------------
+
+
+def test_reporte_html_responde_html_con_que_cuando_y_como(
+    cliente: FlaskClient, incidente: dict[str, Any]
+) -> None:
+    _reportar(cliente, incidente)
+
+    respuesta = cliente.get("/v1/incidentes/reporte")
+
+    assert respuesta.status_code == 200
+    assert respuesta.mimetype == "text/html"
+    html = respuesta.get_data(as_text=True)
+    assert incidente["correlation_id"] in html
+    assert "Divergencia de resultado" in html
+    for seccion in ("Qué", "Cuándo", "Cómo"):
+        assert seccion in html
+
+
+def test_reporte_html_muestra_los_valores_que_difieren(
+    cliente: FlaskClient, incidente: dict[str, Any]
+) -> None:
+    _reportar(cliente, incidente)
+
+    html = cliente.get("/v1/incidentes/reporte").get_data(as_text=True)
+
+    assert "prima_mensual" in html
+    assert "90348.41" in html
+    assert "103900.67" in html
+    assert "31/08/2026 20:41:07.512 UTC" in html
+
+
+def test_reporte_html_filtra_por_correlation_id(
+    cliente: FlaskClient, incidente: dict[str, Any]
+) -> None:
+    otro = incidente | {"correlation_id": "01a05aa8-0000-7000-8000-000000000000"}
+    _reportar(cliente, incidente)
+    _reportar(cliente, otro)
+
+    html = cliente.get(f"/v1/incidentes/reporte?correlation_id={otro['correlation_id']}").get_data(
+        as_text=True
+    )
+
+    assert otro["correlation_id"] in html
+    assert incidente["correlation_id"] not in html
+
+
+def test_reporte_html_escapa_el_contenido_del_incidente(
+    cliente: FlaskClient, incidente: dict[str, Any]
+) -> None:
+    """La evidencia la escribe otro servicio: nunca se inyecta como HTML."""
+    _reportar(cliente, incidente | {"detalle": "<script>alert(1)</script>"})
+
+    html = cliente.get("/v1/incidentes/reporte").get_data(as_text=True)
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_reporte_html_sin_incidentes(cliente: FlaskClient) -> None:
+    respuesta = cliente.get("/v1/incidentes/reporte")
+
+    assert respuesta.status_code == 200
+    assert "No hay incidentes registrados" in respuesta.get_data(as_text=True)
