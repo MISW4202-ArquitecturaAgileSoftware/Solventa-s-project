@@ -11,5 +11,6 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet ruff mypy pytest
+python -m pip install --quiet -r scripts/experiment/requirements.txt
 
 echo "listo. activar con: source .venv/bin/activate"

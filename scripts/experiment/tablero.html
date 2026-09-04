@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Solventa · tablero del experimento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a222c;
+      --line: #2c3a4a;
+      --txt: #e7eef6;
+      --muted: #8aa0b5;
+      --ok: #3dd68c;
+      --bad: #ff6b6b;
+      --run: #f5c542;
+      --wait: #6b7c8d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+    }
+    header {
+      padding: 1.1rem 1.5rem 0.9rem;
+      border-bottom: 1px solid var(--line);
+      background: #121920;
+      position: sticky;
+      top: 0;
+    }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
+    #fase { color: var(--run); margin: 0.35rem 0 0; font-size: 0.95rem; }
+    #meta { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+    main {
+      display: grid;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 980px) {
+      main { grid-template-columns: 1.2fr 0.8fr; }
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1rem 1.1rem 1.2rem;
+    }
+    h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }
+    .pendiente { background: #243040; color: var(--wait); }
+    .en_curso { background: #3a3214; color: var(--run); }
+    .hecho { background: #143325; color: var(--ok); }
+    .cumple { color: var(--ok); font-weight: 700; }
+    .nocumple { color: var(--bad); font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.4rem 0.35rem; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 600; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .kpi {
+      background: #121920;
+      border-radius: 8px;
+      padding: 0.7rem 0.8rem;
+    }
+    .kpi span { display: block; color: var(--muted); font-size: 0.75rem; }
+    .kpi strong { font-size: 1.15rem; }
+    a { color: #7ec8ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Experimento Solventa · detección y enmascaramiento</h1>
+    <p id="fase">Cargando…</p>
+    <p id="meta"></p>
+  </header>
+  <main>
+    <section>
+      <h2>ASR-11 · detección <span id="asr11-badge"></span></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Modo</th>
+            <th>Vía</th>
+            <th class="num">Efectivos</th>
+            <th class="num">Incidentes</th>
+            <th class="num">Tasa</th>
+          </tr>
+        </thead>
+        <tbody id="filas-b"></tbody>
+      </table>
+      <p id="asr11-resumen" style="margin:0.8rem 0 0;color:var(--muted);font-size:0.85rem;"></p>
+    </section>
+    <section>
+      <h2>ASR-12 · enmascaramiento <span id="asr12-badge"></span></h2>
+      <div class="kpis">
+        <div class="kpi"><span>A · p95 base</span><strong id="p95-a">—</strong></div>
+        <div class="kpi"><span>C · p95 con fallo</span><strong id="p95-c">—</strong></div>
+        <div class="kpi"><span>Retardo añadido</span><strong id="retardo">—</strong></div>
+        <div class="kpi"><span>Primas erróneas (C)</span><strong id="erroneas">—</strong></div>
+      </div>
+      <p id="asr12-resumen" style="margin:0.9rem 0 0;color:var(--muted);font-size:0.85rem;"></p>
+      <p style="margin:1rem 0 0;font-size:0.8rem;color:var(--muted);">
+        Locust (carga HTTP): <a href="http://127.0.0.1:8089" target="_blank">:8089</a>
+        · este tablero no se reinicia entre modos.
+      </p>
+    </section>
+  </main>
+  <script>
+    const badge = (estado) => {
+      const etiqueta = {pendiente:"pendiente", en_curso:"en curso", hecho:"hecho", parcial:"parcial"}[estado] || estado;
+      return `<span class="badge ${estado}">${etiqueta}</span>`;
+    };
+    const num = (v, sufijo="") => (v === null || v === undefined) ? "—" : `${v}${sufijo}`;
+
+    async function pintar() {
+      const r = await fetch("/estado.json", {cache: "no-store"});
+      const d = await r.json();
+      document.getElementById("fase").textContent = d.fase || "—";
+      document.getElementById("meta").textContent = "Actualizado " + (d.actualizado || "");
+
+      const tbody = document.getElementById("filas-b");
+      tbody.innerHTML = "";
+      for (const [modo, b] of Object.entries(d.B || {})) {
+        const tr = document.createElement("tr");
+        const tasa = b.estado === "hecho" ? `${b.tasa.toFixed(2)} %` : "—";
+        const cls = b.estado === "hecho" ? (b.cumple ? "cumple" : "nocumple") : "";
+        tr.innerHTML = `
+          <td><code>${modo}</code> ${badge(b.estado)}</td>
+          <td>${b.via || "—"}</td>
+          <td class="num">${num(b.fallos_efectivos)}</td>
+          <td class="num">${num(b.incidentes)}</td>
+          <td class="num ${cls}">${tasa}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      const a11 = d.asr11 || {};
+      document.getElementById("asr11-badge").innerHTML = badge(a11.estado || "pendiente");
+      if (a11.estado === "hecho") {
+        document.getElementById("asr11-resumen").innerHTML =
+          `Peor modo ${a11.peor.toFixed(2)} % · umbral ${d.umbral_deteccion} % · ` +
+          `<span class="${a11.cumple ? "cumple" : "nocumple"}">${a11.cumple ? "CUMPLE" : "NO CUMPLE"}</span>`;
+      } else if (a11.estado === "parcial") {
+        document.getElementById("asr11-resumen").textContent =
+          `${a11.modos_hechos} de ${a11.modos_total} modos terminados.`;
+      } else {
+        document.getElementById("asr11-resumen").textContent = "Aún no hay modos de detección cerrados.";
+      }
+
+      const A = d.A || {}, C = d.C || {}, a12 = d.asr12 || {};
+      document.getElementById("p95-a").textContent = A.estado === "hecho" ? `${A.p95} ms` : (A.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("p95-c").textContent = C.estado === "hecho" ? `${C.p95} ms` : (C.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("asr12-badge").innerHTML = badge(a12.estado || "pendiente");
+      if (a12.estado === "hecho") {
+        document.getElementById("retardo").textContent = `${a12.retardo_ms >= 0 ? "+" : ""}${a12.retardo_ms} ms`;
+        document.getElementById("erroneas").textContent = String(a12.erroneas);
+        document.getElementById("asr12-resumen").innerHTML =
+          `Umbral ≤ ${d.umbral_retardo_ms} ms y 0 primas malas · ` +
+          `<span class="${a12.cumple ? "cumple" : "nocumple"}">${a12.cumple ? "CUMPLE" : "NO CUMPLE"}</span>`;
+      } else {
+        document.getElementById("retardo").textContent = "—";
+        document.getElementById("erroneas").textContent = C.estado === "hecho" ? String(C.erroneas) : "—";
+        document.getElementById("asr12-resumen").textContent =
+          A.estado === "hecho" ? "Falta la corrida C para el retardo añadido." : "La línea base (A) aún no termina.";
+      }
+    }
+    pintar();
+    setInterval(pintar, 1000);
+  </script>
+</body>
+</html>

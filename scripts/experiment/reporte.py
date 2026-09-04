@@ -43,6 +43,29 @@ def marca(cumple: bool) -> str:
     return "**CUMPLE**" if cumple else "**NO CUMPLE**"
 
 
+def denominador_deteccion(datos: dict[str, Any]) -> int:
+    """Fallos que el modo sí inyectó. Sin el campo, se cae al denominador viejo."""
+    if "fallos_efectivos" in datos:
+        return int(datos["fallos_efectivos"])
+    return int(datos["alcanzaron_votacion"])
+
+
+def notas_denominador_parcial(
+    modos: list[tuple[str, dict[str, Any]]],
+) -> list[str]:
+    """Modos donde no toda request que llegó a Votación era un fallo inyectado."""
+    notas: list[str] = []
+    for modo, datos in modos:
+        efectivos = denominador_deteccion(datos)
+        alcanzaron = int(datos["alcanzaron_votacion"])
+        if efectivos < alcanzaron:
+            notas.append(
+                f"`{modo}`: {efectivos} fallos efectivos de {alcanzaron} requests "
+                "que alcanzaron Votación (el modo no altera todas las solicitudes)."
+            )
+    return notas
+
+
 def main() -> int:
     base = cargar("A-baseline.json")
     mascara = cargar("C-enmascaramiento.json")
@@ -75,13 +98,13 @@ def main() -> int:
         tasa = datos.get("tasa_deteccion", 0.0)
         tasas.append(tasa)
         lineas.append(
-            f"| `{modo}` | {VIA.get(modo, '—')} | {datos['alcanzaron_votacion']} "
+            f"| `{modo}` | {VIA.get(modo, '—')} | {denominador_deteccion(datos)} "
             f"| {datos.get('incidentes_registrados', 0)} | {tasa * 100:.2f} % |"
         )
 
     peor = min(tasas) if tasas else 0.0
     total_inc = sum(d.get("incidentes_registrados", 0) for _, d in modos)
-    total_req = sum(d["alcanzaron_votacion"] for _, d in modos)
+    total_req = sum(denominador_deteccion(d) for _, d in modos)
     global_ = total_inc / total_req if total_req else 0.0
     lineas += [
         "",
@@ -91,6 +114,11 @@ def main() -> int:
         f"(umbral {UMBRAL_DETECCION * 100:.0f} % en TODOS los modos).",
         "",
     ]
+    notas = notas_denominador_parcial(modos)
+    for nota in notas:
+        lineas.append(f"- {nota}")
+    if notas:
+        lineas.append("")
 
     # --- ASR-12 --------------------------------------------------------------
     lineas += [

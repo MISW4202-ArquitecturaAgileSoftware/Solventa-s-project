@@ -4,7 +4,7 @@ Generado por `scripts/experiment/reporte.py` a partir de los JSON de
 `scripts/experiment/resultados/`. Ningún número de este documento se
 escribe a mano.
 
-Fecha de la corrida: 2026-09-03T02:28:37+00:00
+Fecha de la corrida: 2026-09-04T02:16:05+00:00
 
 ---
 
@@ -36,10 +36,10 @@ Umbrales: retardo añadido **≤ 300 ms** sobre el p95 de la línea base, y
 
 | Corrida | n | tasa real | p50 | p95 | p99 | máx |
 |---|---:|---:|---:|---:|---:|---:|
-| A · línea base | 5000 | 476.3/min | 62.38 ms | 89.36 ms | 97.89 ms | 111.0 ms |
-| C · con fallo activo | 5000 | 476.3/min | 71.05 ms | 97.79 ms | 106.03 ms | 118.45 ms |
+| A · línea base | 5000 | 476.3/min | 53.05 ms | 83.92 ms | 93.37 ms | 104.75 ms |
+| C · con fallo activo | 5000 | 476.3/min | 54.22 ms | 79.65 ms | 89.77 ms | 107.53 ms |
 
-- Retardo añadido sobre el p95: **+8.43 ms** (base 89.36 ms → con fallo 97.79 ms).
+- Retardo añadido sobre el p95: **-4.27 ms** (base 83.92 ms → con fallo 79.65 ms).
 - Veredicto latencia: **CUMPLE** (umbral ≤ 300 ms).
 
 - Primas erróneas entregadas en la corrida C: **0** de 5000 respuestas verificadas una a una contra el dominio.

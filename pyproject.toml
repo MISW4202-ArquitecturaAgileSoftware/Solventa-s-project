@@ -12,6 +12,7 @@ src = [
   "services/cotizador/src",
   "services/gestion-errores/src",
   "services/votacion/src",
+  "scripts/experiment",
 ]
 extend-exclude = [".venv"]
 
@@ -50,7 +51,7 @@ python_version = "3.14"
 strict = true
 warn_unreachable = true
 show_error_codes = true
-mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src"
+mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src:scripts/experiment"
 exclude = [
   "^\\.venv/",
   # pytest exige que el archivo se llame conftest.py, así que cada servicio
@@ -62,13 +63,14 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["redis.*"]
+module = ["redis.*", "locust.*", "gevent.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-q --strict-markers"
-testpaths = ["services"]
+pythonpath = ["scripts/experiment"]
+testpaths = ["services", "scripts/experiment"]
 markers = [
   "integracion: requiere Redis u otros servicios levantados",
 ]

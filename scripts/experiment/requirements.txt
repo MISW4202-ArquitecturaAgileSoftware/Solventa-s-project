@@ -1,0 +1,3 @@
+# Generador de carga del experimento. Solo se instala en el venv del host;
+# ninguna imagen de servicio lo declara.
+locust==2.46.4

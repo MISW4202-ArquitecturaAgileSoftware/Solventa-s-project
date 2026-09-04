@@ -684,8 +684,10 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 1. `scripts/experiment/inyectar.sh <replica> <modo>`: reinicia una réplica con su
    `FAULT_MODE` y comprueba que el proceso quede en ejecución.
-2. `scripts/experiment/carga.js` (k6): 500 cotizaciones/min sostenidas, entradas
-   variadas (edad, suma, plazo, canal) para no medir siempre el mismo camino.
+2. `scripts/experiment/locustfile.py` (Locust): 500 cotizaciones/min sostenidas,
+   entradas variadas (edad, suma, plazo, canal) para no medir siempre el mismo
+   camino. Detalle de fases y denominador en
+   `docs/PLAN-IMPLEMENTACION-LOCUST.md`.
 3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra el p95 limpio.
 4. **Corrida B — detección:** inyecta cada uno de los 8 modos de fallo, 1000
    cotizaciones por modo, y contrasta los incidentes de `/v1/metricas` contra el
@@ -699,7 +701,7 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 | ASR | Métrica | Umbral | Cómo se obtiene |
 |---|---|---|---|
-| **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes registrados ÷ fallos inyectados, por modo |
+| **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes registrados ÷ fallos efectivos, por modo |
 | **ASR-12** | Retardo añadido | **≤ 300 ms** sobre el p95 base | `p95(corrida C) − p95(corrida A)` |
 | **ASR-12** | Primas erróneas entregadas | **0** | ninguna respuesta distinta del valor de consenso sano |
 
