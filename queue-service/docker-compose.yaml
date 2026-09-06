@@ -1,0 +1,34 @@
+# Queue server. Imagen oficial: no hay Dockerfile propio que mantener.
+
+services:
+  redis:
+    image: redis:${REDIS_TAG:?falta REDIS_TAG en .env}
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redisdata:/data
+    networks:
+      # Único servicio presente en las dos zonas de la cola: es el puente.
+      - data-votacion
+      - data-cotizadores
+    healthcheck:
+      # "Arrancado" no es "listo": hasta que no responde PONG, quien dependa de
+      # él no debe arrancar.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  data-votacion:
+    name: ${STACK:?falta STACK en .env}_data_votacion
+    internal: true
+  data-cotizadores:
+    name: ${STACK:?falta STACK en .env}_data_cotizadores
+    internal: true
+
+volumes:
+  redisdata:
+    name: ${STACK:?falta STACK en .env}_redisdata

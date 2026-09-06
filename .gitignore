@@ -1,0 +1,16 @@
+# Entorno local — el contrato de configuración es example.env, que sí se commitea
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Resultados del experimento (se regeneran)
+scripts/experiment/resultados/

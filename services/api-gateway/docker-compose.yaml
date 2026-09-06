@@ -1,0 +1,29 @@
+# API Gateway: única puerta de entrada. Es el ÚNICO servicio en la red `edge`.
+
+services:
+  api-gateway:
+    image: solventa/api-gateway:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en edge/backend.
+      network: host
+    restart: unless-stopped
+    networks:
+      # edge: la única zona con salida al exterior. Nadie más se conecta aquí.
+      - edge
+      # backend: para alcanzar al servicio de cotización configurado.
+      - backend
+    ports:
+      - "${PUERTO_GATEWAY:?falta PUERTO_GATEWAY en .env}:8000"
+    environment:
+      QUOTATION_SERVICE_URL: ${QUOTATION_SERVICE_URL:?falta QUOTATION_SERVICE_URL en .env}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:?falta UPSTREAM_TIMEOUT_MS en .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+networks:
+  edge:
+    name: ${STACK:?falta STACK en .env}_edge
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true

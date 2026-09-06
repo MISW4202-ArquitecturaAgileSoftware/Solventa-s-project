@@ -1,0 +1,4 @@
+# Dependencias de ejecución del worker. Versiones fijadas a mano: sin uv no hay
+# lockfile, así que un rango abierto haría irreproducible la imagen.
+# El código de dominio vive dentro del propio servicio.
+redis==8.1.0

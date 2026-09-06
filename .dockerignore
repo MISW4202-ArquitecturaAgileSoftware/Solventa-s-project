@@ -1,0 +1,26 @@
+# Exclusiones para cualquier construcción auxiliar iniciada desde la raíz.
+# Las imágenes de los servicios usan su propia carpeta como contexto.
+.git
+.gitignore
+.gitattributes
+.dockerignore
+
+.venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Documentación y utilidades: no forman parte de ninguna imagen
+docs
+scripts
+**/tests
+PLAN-IMPLEMENTACION.md
+
+# Nunca dentro de una imagen
+.env
+**/.env

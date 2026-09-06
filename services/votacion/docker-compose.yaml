@@ -1,0 +1,56 @@
+# Votación: comparador y votador. Es quien detecta (ASR-11) y enmascara (ASR-12).
+
+services:
+  votacion:
+    image: solventa/votacion:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. El contenedor en runtime
+      # sigue en data-votacion/backend/ops.
+      network: host
+    restart: unless-stopped
+    networks:
+      # data-votacion: para publicar en el stream y recoger las respuestas.
+      # No comparte red con los cotizadores: el único camino entre ellos es
+      # la cola.
+      - data-votacion
+      # backend: para reportar incidentes a gestion-errores y recibir del gateway.
+      - backend
+      # ops: solo para poder validar y medir desde el host.
+      - ops
+    ports:
+      - "${PUERTO_VOTACION:?falta PUERTO_VOTACION en .env}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      gestion-errores:
+        condition: service_started
+      cotizador-a:
+        condition: service_started
+      cotizador-b:
+        condition: service_started
+      cotizador-c:
+        condition: service_started
+    environment:
+      REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
+      STREAM_SOLICITUDES: ${STREAM_SOLICITUDES:?falta STREAM_SOLICITUDES en .env}
+      PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:?falta PREFIJO_RESPUESTAS en .env}
+      REPLICAS_ESPERADAS: ${REPLICAS_ESPERADAS:?falta REPLICAS_ESPERADAS en .env}
+      QUORUM: ${QUORUM:?falta QUORUM en .env}
+      TIMEOUT_CONSENSO_MS: ${TIMEOUT_CONSENSO_MS:?falta TIMEOUT_CONSENSO_MS en .env}
+      GRACIA_TRAS_QUORUM_MS: ${GRACIA_TRAS_QUORUM_MS:?falta GRACIA_TRAS_QUORUM_MS en .env}
+      STREAM_MAXLEN: ${STREAM_MAXLEN:-10000}
+      EXPOSE_CONSENSUS: ${EXPOSE_CONSENSUS:-false}
+      URL_GESTION_ERRORES: ${URL_GESTION_ERRORES:?falta URL_GESTION_ERRORES en .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+networks:
+  data-votacion:
+    name: ${STACK:?falta STACK en .env}_data_votacion
+    internal: true
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops

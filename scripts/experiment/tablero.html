@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Solventa · tablero del experimento</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a222c;
+      --line: #2c3a4a;
+      --txt: #e7eef6;
+      --muted: #8aa0b5;
+      --ok: #3dd68c;
+      --bad: #ff6b6b;
+      --run: #f5c542;
+      --wait: #6b7c8d;
+      --bar-a: #7ec8ff;
+      --bar-c: #c084fc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+    }
+    header {
+      padding: 1.1rem 1.5rem 0.9rem;
+      border-bottom: 1px solid var(--line);
+      background: #121920;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    header h1 { margin: 0; font-size: 1.15rem; font-weight: 650; }
+    #fase { color: var(--run); margin: 0.35rem 0 0; font-size: 0.95rem; }
+    #meta { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+    main {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem 1.5rem 2rem;
+    }
+    .grid-2 {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 980px) {
+      .grid-2 { grid-template-columns: 1.2fr 0.8fr; }
+    }
+    .graficos {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 980px) {
+      .graficos { grid-template-columns: 1fr 1fr; }
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1rem 1.1rem 1.2rem;
+    }
+    h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+    .hint { margin: 0.35rem 0 0.8rem; color: var(--muted); font-size: 0.8rem; }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+    }
+    .pendiente { background: #243040; color: var(--wait); }
+    .en_curso { background: #3a3214; color: var(--run); }
+    .hecho { background: #143325; color: var(--ok); }
+    .parcial { background: #3a3214; color: var(--run); }
+    .cumple { color: var(--ok); font-weight: 700; }
+    .nocumple { color: var(--bad); font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.4rem 0.35rem; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 600; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .kpi {
+      background: #121920;
+      border-radius: 8px;
+      padding: 0.7rem 0.8rem;
+    }
+    .kpi span { display: block; color: var(--muted); font-size: 0.75rem; }
+    .kpi strong { font-size: 1.15rem; }
+    a { color: #7ec8ff; }
+    .chart {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+    }
+    .catalogo {
+      display: grid;
+      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+    article.modo {
+      background: #121920;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.75rem 0.85rem;
+    }
+    article.modo.en_curso { border-color: var(--run); }
+    article.modo.hecho.ok { border-color: #1f6b45; }
+    article.modo.hecho.ko { border-color: var(--bad); }
+    article.modo h3 {
+      margin: 0 0 0.35rem;
+      font-size: 0.92rem;
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    article.modo p { margin: 0.3rem 0 0; font-size: 0.8rem; color: var(--muted); }
+    article.modo p strong { color: var(--txt); font-weight: 600; }
+    .leyenda { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem; }
+    .leyenda i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 0.3rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Experimento Solventa · detección y enmascaramiento</h1>
+    <p id="fase">Cargando…</p>
+    <p id="meta"></p>
+  </header>
+  <main>
+    <div class="grid-2">
+      <section>
+        <h2>ASR-11 · detección <span id="asr11-badge"></span></h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Modo</th>
+              <th>Vía</th>
+              <th class="num">Efectivos</th>
+              <th class="num">Incidentes</th>
+              <th class="num">Tasa</th>
+            </tr>
+          </thead>
+          <tbody id="filas-b"></tbody>
+        </table>
+        <p id="asr11-resumen" style="margin:0.8rem 0 0;color:var(--muted);font-size:0.85rem;"></p>
+      </section>
+      <section>
+        <h2>ASR-12 · enmascaramiento <span id="asr12-badge"></span></h2>
+        <div class="kpis">
+          <div class="kpi"><span>A · media base</span><strong id="media-a">—</strong></div>
+          <div class="kpi"><span>C · media con fallo</span><strong id="media-c">—</strong></div>
+          <div class="kpi"><span>Retardo añadido</span><strong id="retardo">—</strong></div>
+          <div class="kpi"><span>Primas erróneas (C)</span><strong id="erroneas">—</strong></div>
+        </div>
+        <p id="asr12-resumen" style="margin:0.9rem 0 0;color:var(--muted);font-size:0.85rem;"></p>
+        <p style="margin:1rem 0 0;font-size:0.8rem;color:var(--muted);">
+          Locust (carga HTTP): <a href="http://127.0.0.1:8089" target="_blank">:8089</a>
+          · este tablero no se reinicia entre modos.
+        </p>
+      </section>
+    </div>
+
+    <div class="graficos">
+      <section>
+        <h2>Detección por modo</h2>
+        <p class="hint">Cada barra aparece al cerrar el bloque B. La línea es el umbral ASR-11 (99 %).</p>
+        <svg id="chart-deteccion" class="chart" role="img" aria-label="Tasa de detección por modo"></svg>
+      </section>
+      <section>
+        <h2>Latencia A vs C</h2>
+        <p class="hint">Latencia del journey. ASR-12 mira media(C) − media(A) ≤ 300 ms.</p>
+        <svg id="chart-latencia" class="chart" role="img" aria-label="Latencia A frente a C"></svg>
+        <p class="leyenda"><span><i style="background:var(--bar-a)"></i>A línea base</span><span><i style="background:var(--bar-c)"></i>C con fallo</span></p>
+      </section>
+    </div>
+
+    <section>
+      <h2>Línea de tiempo</h2>
+      <p class="hint">A, los ocho modos de B y C. Cada casilla es un bloque; el número de arriba es su duración.</p>
+      <svg id="chart-timeline" class="chart timeline" role="img" aria-label="Línea de tiempo del experimento"></svg>
+    </section>
+
+    <section>
+      <h2>Catálogo de modos</h2>
+      <p class="hint">Qué se le hace a la réplica B, qué debería ver Votación y cuándo el modo no altera el resultado.</p>
+      <div id="catalogo" class="catalogo"></div>
+    </section>
+  </main>
+  <script>
+    const NS = "http://www.w3.org/2000/svg";
+    const badge = (estado) => {
+      const etiqueta = {pendiente:"pendiente", en_curso:"en curso", hecho:"hecho", parcial:"parcial"}[estado] || estado;
+      return `<span class="badge ${estado}">${etiqueta}</span>`;
+    };
+    const num = (v, sufijo="") => (v === null || v === undefined) ? "—" : `${v}${sufijo}`;
+    const esc = (s) => String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+
+    const svg = (tag, attrs, text) => {
+      const n = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, String(v));
+      if (text != null) n.textContent = text;
+      return n;
+    };
+
+    const vaciar = (el) => { while (el.firstChild) el.removeChild(el.firstChild); };
+
+    const ALIAS = {
+      "A · línea base": "A",
+      "C · enmascaramiento": "C",
+      premium_offset: "offset",
+      factor_skip: "skip",
+      rate_table_stale: "stale",
+      rounding_drift: "round",
+      out_of_range: "range",
+      silent_zero: "zero",
+      slow: "slow",
+      crash: "crash",
+    };
+    const aliasModo = (modo) => ALIAS[modo] || String(modo).replaceAll("_", " ");
+    const aliasPaso = (etiqueta) => {
+      if (ALIAS[etiqueta]) return ALIAS[etiqueta];
+      return aliasModo((etiqueta || "").replace(/^B · /, ""));
+    };
+
+    function marco(el, altura) {
+      const W = Math.max(Math.floor(el.getBoundingClientRect().width), 320);
+      const H = altura;
+      el.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      el.setAttribute("width", String(W));
+      el.setAttribute("height", String(H));
+      el.setAttribute("preserveAspectRatio", "xMinYMid meet");
+      vaciar(el);
+      return {W, H};
+    }
+
+    function etiquetaRotada(el, x, y, texto, titulo) {
+      const t = svg("text", {
+        x, y,
+        fill: "#8aa0b5",
+        "font-size": "11",
+        "text-anchor": "end",
+        transform: `rotate(-40 ${x} ${y})`,
+      }, texto);
+      if (titulo) t.appendChild(svg("title", {}, titulo));
+      el.appendChild(t);
+    }
+
+    function pintarDeteccion(el, d) {
+      const modos = Object.entries(d.B || {});
+      const umbral = Number(d.umbral_deteccion || 99);
+      const {W, H} = marco(el, 220);
+      const L = 36, R = 8, T = 18, Btm = 56;
+      const innerW = W - L - R, innerH = H - T - Btm;
+      const n = Math.max(modos.length, 1);
+      const gap = innerW / n;
+      const bw = Math.min(gap * 0.55, 42);
+      el.appendChild(svg("line", {x1:L, x2:W-R, y1:T+innerH, y2:T+innerH, stroke:"#2c3a4a"}));
+      const yU = T + innerH * (1 - umbral / 100);
+      el.appendChild(svg("line", {
+        x1:L, x2:W-R, y1:yU, y2:yU, stroke:"#f5c542",
+        "stroke-dasharray":"4 3", "stroke-width":"1.2"
+      }));
+      el.appendChild(svg("text", {x:4, y:yU+3, fill:"#f5c542", "font-size":"11"}, `${umbral}%`));
+      modos.forEach(([modo, b], i) => {
+        const x = L + gap * i + (gap - bw) / 2;
+        const hecho = b.estado === "hecho";
+        const tasa = hecho ? Number(b.tasa || 0) : 0;
+        const h = innerH * Math.min(tasa, 100) / 100;
+        const y = T + innerH - h;
+        const color = !hecho ? "#243040" : (b.cumple ? "#3dd68c" : "#ff6b6b");
+        if (b.estado === "en_curso") {
+          el.appendChild(svg("rect", {x, y:T, width:bw, height:innerH, fill:"#3a3214", rx:3}));
+        } else {
+          el.appendChild(svg("rect", {x, y, width:bw, height:Math.max(h, 1), fill:color, rx:3}));
+        }
+        etiquetaRotada(el, x + bw / 2, T + innerH + 14, aliasModo(modo), modo);
+        if (hecho) {
+          el.appendChild(svg("text", {
+            x: x + bw / 2, y: y - 4,
+            fill:color, "font-size":"11", "text-anchor":"middle"
+          }, `${tasa.toFixed(0)}`));
+        }
+      });
+    }
+
+    function pintarLatencia(el, d) {
+      const A = d.A || {}, C = d.C || {};
+      const {W, H} = marco(el, 200);
+      const L = 40, R = 16, T = 16, Btm = 28;
+      const innerW = W - L - R, innerH = H - T - Btm;
+      const keys = ["media", "p50", "p99"];
+      const vals = keys.flatMap((k) => [Number(A[k] || 0), Number(C[k] || 0)]);
+      const max = Math.max(10, ...vals) * 1.15;
+      const grupos = keys.length;
+      const gap = innerW / grupos;
+      el.appendChild(svg("line", {x1:L, x2:W-R, y1:T+innerH, y2:T+innerH, stroke:"#2c3a4a"}));
+      keys.forEach((k, i) => {
+        const gx = L + gap * i;
+        const bw = Math.min(gap * 0.28, 36);
+        const a = Number(A[k] || 0), c = Number(C[k] || 0);
+        const ha = A.estado === "hecho" ? innerH * a / max : 0;
+        const hc = C.estado === "hecho" ? innerH * c / max : 0;
+        const xa = gx + gap * 0.22;
+        const xc = xa + bw + 8;
+        el.appendChild(svg("rect", {x:xa, y:T+innerH-Math.max(ha,1), width:bw, height:Math.max(ha,1), fill:"#7ec8ff", rx:3, opacity: A.estado === "hecho" ? 1 : 0.25}));
+        el.appendChild(svg("rect", {x:xc, y:T+innerH-Math.max(hc,1), width:bw, height:Math.max(hc,1), fill:"#c084fc", rx:3, opacity: C.estado === "hecho" ? 1 : 0.25}));
+        el.appendChild(svg("text", {x:gx+gap/2, y:H-8, fill:"#8aa0b5", "font-size":"12", "text-anchor":"middle"}, k));
+        if (A.estado === "hecho") {
+          el.appendChild(svg("text", {x:xa+bw/2, y:T+innerH-ha-4, fill:"#7ec8ff", "font-size":"11", "text-anchor":"middle"}, `${a}`));
+        }
+        if (C.estado === "hecho") {
+          el.appendChild(svg("text", {x:xc+bw/2, y:T+innerH-hc-4, fill:"#c084fc", "font-size":"11", "text-anchor":"middle"}, `${c}`));
+        }
+      });
+      if (A.estado !== "hecho" && C.estado !== "hecho") {
+        el.appendChild(svg("text", {x:W/2, y:H/2, fill:"#8aa0b5", "font-size":"13", "text-anchor":"middle"}, "Aún no hay latencias"));
+      }
+    }
+
+    function pintarTimeline(el, d) {
+      const pasos = d.timeline || [];
+      const {W, H} = marco(el, 108);
+      const L = 12, R = 12, T = 22;
+      const n = Math.max(pasos.length, 1);
+      const gap = (W - L - R) / n;
+      const bw = Math.max(gap - 6, 8);
+      const colores = {pendiente:"#243040", en_curso:"#f5c542", hecho:"#3dd68c"};
+      pasos.forEach((p, i) => {
+        const x = L + gap * i;
+        const color = colores[p.estado] || colores.pendiente;
+        const barra = svg("rect", {
+          x, y: T, width: bw, height: 22, fill: color, rx: 4,
+          opacity: p.estado === "pendiente" ? 0.55 : 1,
+        });
+        barra.appendChild(svg("title", {}, p.etiqueta || ""));
+        el.appendChild(barra);
+        if (p.estado === "hecho" && p.duracion_s != null) {
+          el.appendChild(svg("text", {
+            x: x + bw / 2, y: T - 6,
+            fill: "#e7eef6", "font-size": "11", "text-anchor": "middle",
+          }, `${Math.round(p.duracion_s)}s`));
+        }
+        etiquetaRotada(el, x + bw / 2, T + 36, aliasPaso(p.etiqueta), p.etiqueta);
+      });
+    }
+
+    function pintarCatalogo(el, d) {
+      const fichas = d.catalogo || [];
+      el.innerHTML = fichas.map((f) => {
+        const estado = f.estado || "pendiente";
+        const ok = estado === "hecho" && f.cumple;
+        const ko = estado === "hecho" && f.cumple === false;
+        const cls = ["modo", estado, ok ? "ok" : "", ko ? "ko" : ""].filter(Boolean).join(" ");
+        const tasa = estado === "hecho" ? `${Number(f.tasa).toFixed(2)} %` : "—";
+        const veredicto = estado !== "hecho" ? "" :
+          `<span class="${f.cumple ? "cumple" : "nocumple"}">${f.cumple ? "CUMPLE" : "NO CUMPLE"}</span>`;
+        return `<article class="${cls}">
+          <h3><code>${esc(f.modo)}</code> ${badge(estado)} ${veredicto}</h3>
+          <p><strong>Inyecta.</strong> ${esc(f.inyecta || "—")}</p>
+          <p><strong>Vía.</strong> ${esc(f.via || "—")}</p>
+          <p><strong>Trampa.</strong> ${esc(f.trampa || "—")}</p>
+          <p><strong>Tasa.</strong> ${esc(tasa)}</p>
+        </article>`;
+      }).join("");
+    }
+
+    async function pintar() {
+      const r = await fetch("/estado.json", {cache: "no-store"});
+      const d = await r.json();
+      document.getElementById("fase").textContent = d.fase || "—";
+      document.getElementById("meta").textContent = "Actualizado " + (d.actualizado || "");
+
+      const tbody = document.getElementById("filas-b");
+      tbody.innerHTML = "";
+      for (const [modo, b] of Object.entries(d.B || {})) {
+        const tr = document.createElement("tr");
+        const tasa = b.estado === "hecho" ? `${b.tasa.toFixed(2)} %` : "—";
+        const cls = b.estado === "hecho" ? (b.cumple ? "cumple" : "nocumple") : "";
+        tr.innerHTML = `
+          <td><code>${esc(modo)}</code> ${badge(b.estado)}</td>
+          <td>${esc(b.via || "—")}</td>
+          <td class="num">${num(b.fallos_efectivos)}</td>
+          <td class="num">${num(b.incidentes)}</td>
+          <td class="num ${cls}">${tasa}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      const a11 = d.asr11 || {};
+      document.getElementById("asr11-badge").innerHTML = badge(a11.estado || "pendiente");
+      if (a11.estado === "hecho") {
+        document.getElementById("asr11-resumen").innerHTML =
+          `Peor modo ${a11.peor.toFixed(2)} % · umbral ${d.umbral_deteccion} % · ` +
+          `<span class="${a11.cumple ? "cumple" : "nocumple"}">${a11.cumple ? "CUMPLE" : "NO CUMPLE"}</span>`;
+      } else if (a11.estado === "parcial") {
+        document.getElementById("asr11-resumen").textContent =
+          `${a11.modos_hechos} de ${a11.modos_total} modos terminados.`;
+      } else {
+        document.getElementById("asr11-resumen").textContent = "Aún no hay modos de detección cerrados.";
+      }
+
+      const A = d.A || {}, C = d.C || {}, a12 = d.asr12 || {};
+      document.getElementById("media-a").textContent = A.estado === "hecho" ? `${A.media} ms` : (A.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("media-c").textContent = C.estado === "hecho" ? `${C.media} ms` : (C.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("asr12-badge").innerHTML = badge(a12.estado || "pendiente");
+      if (a12.estado === "hecho") {
+        document.getElementById("retardo").textContent = `${a12.retardo_ms >= 0 ? "+" : ""}${a12.retardo_ms} ms`;
+        document.getElementById("erroneas").textContent = String(a12.erroneas);
+        document.getElementById("asr12-resumen").innerHTML =
+          `Umbral ≤ ${d.umbral_retardo_ms} ms y 0 primas malas · ` +
+          `<span class="${a12.cumple ? "cumple" : "nocumple"}">${a12.cumple ? "CUMPLE" : "NO CUMPLE"}</span>`;
+      } else {
+        document.getElementById("retardo").textContent = "—";
+        document.getElementById("erroneas").textContent = C.estado === "hecho" ? String(C.erroneas) : "—";
+        document.getElementById("asr12-resumen").textContent =
+          A.estado === "hecho" ? "Falta la corrida C para el retardo añadido." : "La línea base (A) aún no termina.";
+      }
+
+      pintarDeteccion(document.getElementById("chart-deteccion"), d);
+      pintarLatencia(document.getElementById("chart-latencia"), d);
+      pintarTimeline(document.getElementById("chart-timeline"), d);
+      pintarCatalogo(document.getElementById("catalogo"), d);
+    }
+    pintar();
+    setInterval(pintar, 1000);
+  </script>
+</body>
+</html>

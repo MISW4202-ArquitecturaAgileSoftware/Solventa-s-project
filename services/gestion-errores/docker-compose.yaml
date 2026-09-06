@@ -1,0 +1,37 @@
+# GestorErrores: destino de la flecha `Votacion -> GestorErrores` del diagrama.
+
+services:
+  gestion-errores:
+    image: solventa/gestion-errores:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en backend/ops.
+      network: host
+    restart: unless-stopped
+    networks:
+      # backend: por donde lo llama Votación.
+      - backend
+      # ops: solo para que el host pueda leer /v1/metricas al medir. Un
+      # servicio conectado únicamente a redes `internal: true` no puede
+      # publicar puertos, y sin publicarlos no habría cómo medir ASR-11.
+      - ops
+    ports:
+      - "${PUERTO_GESTION_ERRORES:?falta PUERTO_GESTION_ERRORES en .env}:8000"
+    volumes:
+      # La evidencia del experimento sobrevive al contenedor.
+      - incidentes:/datos
+    environment:
+      RUTA_INCIDENTES: /datos/incidentes.jsonl
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+networks:
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops
+
+volumes:
+  incidentes:
+    name: ${STACK:?falta STACK en .env}_incidentes
