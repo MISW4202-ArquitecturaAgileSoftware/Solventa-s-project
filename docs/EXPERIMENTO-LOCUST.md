@@ -28,10 +28,19 @@ verifica la prima entregada.
 
 ### Requisitos
 
-- Docker Compose y las imágenes `solventa/*:dev`.
-- `.env` copiado desde `example.env`.
-- `.venv` con Locust (`./scripts/bootstrap.sh`).
-- Stack arriba.
+En el sistema: Git, Docker Engine + Compose v2, Python 3.14, curl. El usuario
+tiene que poder ejecutar `docker` sin error (`docker info`).
+
+Un solo script deja `.env`, venv, imágenes y stack listos, y hace un POST de
+humo al gateway:
+
+```bash
+./scripts/preparar.sh
+```
+
+Si las imágenes ya existen: `./scripts/preparar.sh --sin-build`.
+
+Pasos sueltos (equivalente):
 
 ```bash
 cp -n example.env .env
@@ -327,7 +336,7 @@ no cumple.
 | A · p95 base | p95 con las tres réplicas sanas |
 | C · p95 con fallo | p95 con `premium_offset` en B |
 | Retardo añadido | `p95(C) − p95(A)`. Umbral ≤ 300 ms |
-| Primas erróneas (C) | Respuestas 200 de C cuya prima ≠ oráculo. Umbral: 0 |
+| Primas erróneas (C) | Respuestas de C cuya prima ≠ oráculo. Umbral: 0 |
 
 CUMPLE solo si se cumplen **los dos** umbrales.
 
