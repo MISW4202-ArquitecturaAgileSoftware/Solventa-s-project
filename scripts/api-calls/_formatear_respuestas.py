@@ -13,16 +13,10 @@ if not filas:
     print("(sin respuestas)")
     raise SystemExit(1)
 
-print(f"{'réplica':<8} {'estado':<7} {'prima_mensual':>14} {'ms':>4}  resultado_hash")
+print(f"{'réplica':<8} {'estado':<7} {'prima_mensual':>14} {'ms':>4}")
 for fila in sorted(filas, key=lambda f: f["cotizador_id"]):
     resultado = fila.get("resultado") or {}
     prima = resultado.get("prima_mensual", "-")
-    huella = (fila.get("resultado_hash") or "-")[:16]
-    print(
-        f"{fila['cotizador_id']:<8} {fila['estado']:<7} {prima:>14} "
-        f"{fila['duracion_ms']:>4}  {huella}"
-    )
+    print(f"{fila['cotizador_id']:<8} {fila['estado']:<7} {prima:>14} {fila['duracion_ms']:>4}")
 
-hashes = {f.get("resultado_hash") for f in filas if f.get("resultado_hash")}
-print()
-print(f"respuestas: {len(filas)} | hashes distintos: {len(hashes)}")
+print(f"\nrespuestas: {len(filas)}")

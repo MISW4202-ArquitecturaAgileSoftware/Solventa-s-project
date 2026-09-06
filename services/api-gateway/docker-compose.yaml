@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en edge/backend.
+      network: host
     restart: unless-stopped
     networks:
       # edge: la única zona con salida al exterior. Nadie más se conecta aquí.

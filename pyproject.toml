@@ -1,6 +1,6 @@
 # Configuración de tooling del monorepo. NO declara dependencias de ejecución:
-# cada servicio tiene su propio requirements.txt y la librería compartida su
-# propio pyproject.toml. Este archivo solo unifica linter, tipos y tests.
+# cada servicio tiene su propio requirements.txt y su código local. Este
+# archivo solo unifica linter, tipos y tests del monorepo.
 
 [tool.ruff]
 line-length = 100
@@ -8,11 +8,11 @@ target-version = "py314"
 # Sin esto, ruff trata `cotizador` y `gestion_errores` como dependencias de
 # terceros y reordena mal los imports.
 src = [
-  "libs/solventa-common/src",
   "services/api-gateway/src",
   "services/cotizador/src",
   "services/gestion-errores/src",
   "services/votacion/src",
+  "scripts/experiment",
 ]
 extend-exclude = [".venv"]
 
@@ -51,7 +51,7 @@ python_version = "3.14"
 strict = true
 warn_unreachable = true
 show_error_codes = true
-mypy_path = "libs/solventa-common/src:services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src"
+mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src:scripts/experiment"
 exclude = [
   "^\\.venv/",
   # pytest exige que el archivo se llame conftest.py, así que cada servicio
@@ -63,13 +63,14 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["redis.*"]
+module = ["redis.*", "locust.*", "gevent.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-q --strict-markers"
-testpaths = ["libs/solventa-common/tests", "services"]
+pythonpath = ["scripts/experiment"]
+testpaths = ["services", "scripts/experiment"]
 markers = [
   "integracion: requiere Redis u otros servicios levantados",
 ]

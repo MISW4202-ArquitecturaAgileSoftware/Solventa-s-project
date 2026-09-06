@@ -1,6 +1,5 @@
-# El contexto de build es la RAÍZ del repo (los servicios necesitan libs/).
-# Sin este archivo se envían cientos de MB al daemon y la caché se rompe en
-# cada commit.
+# Exclusiones para cualquier construcción auxiliar iniciada desde la raíz.
+# Las imágenes de los servicios usan su propia carpeta como contexto.
 .git
 .gitignore
 .gitattributes
