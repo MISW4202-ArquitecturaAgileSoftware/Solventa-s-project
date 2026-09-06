@@ -30,6 +30,53 @@ VIA = {
     "crash": "réplica no responde",
 }
 
+#: Qué inyecta cada modo en B y dónde no altera el resultado. El tablero HTML
+#: lo enseña junto a la tasa; no se escribe a mano en el informe.
+CATALOGO_MODOS: dict[str, dict[str, str]] = {
+    "premium_offset": {
+        "inyecta": "Multiplica la prima mensual por 1.15.",
+        "trampa": "Ninguna: altera todas las solicitudes válidas.",
+    },
+    "factor_skip": {
+        "inyecta": "Anula los factores de clase ocupacional (todos a 1.00).",
+        "trampa": "La clase 1 ya vale 1.00: esas solicitudes no entran al denominador.",
+    },
+    "rate_table_stale": {
+        "inyecta": "Calcula con el tarifario 2025.11 en vez del vigente 2026.02.",
+        "trampa": "Solo es fallo efectivo si las dos tablas dan primas distintas.",
+    },
+    "rounding_drift": {
+        "inyecta": "Trunca la prima a pesos enteros en vez de redondear a centavos.",
+        "trampa": "El desvío es de céntimos; el 2 de 3 igual lo ve.",
+    },
+    "out_of_range": {
+        "inyecta": "Multiplica la prima por 500.",
+        "trampa": "Votación lo ve como divergencia de resultado, no como regla de validez.",
+    },
+    "silent_zero": {
+        "inyecta": "Entrega prima mensual 0.00.",
+        "trampa": "Dos réplicas sanas ganan la votación; el cliente no ve el cero.",
+    },
+    "slow": {
+        "inyecta": "Duerme 400 ms antes de responder.",
+        "trampa": "Supera el presupuesto de consenso (250 ms); B no entra al quórum.",
+    },
+    "crash": {
+        "inyecta": "No produce respuesta (sin XACK).",
+        "trampa": "A y C alcanzan mayoría; el cliente no ve el crash.",
+    },
+}
+
+
+def ficha_modo(modo: str) -> dict[str, str]:
+    extra = CATALOGO_MODOS.get(modo, {})
+    return {
+        "modo": modo,
+        "via": VIA.get(modo, "—"),
+        "inyecta": extra.get("inyecta", "—"),
+        "trampa": extra.get("trampa", "—"),
+    }
+
 
 def cargar(nombre: str) -> dict[str, Any] | None:
     ruta = RESULTADOS / nombre
@@ -41,6 +88,29 @@ def cargar(nombre: str) -> dict[str, Any] | None:
 
 def marca(cumple: bool) -> str:
     return "**CUMPLE**" if cumple else "**NO CUMPLE**"
+
+
+def denominador_deteccion(datos: dict[str, Any]) -> int:
+    """Fallos que el modo sí inyectó. Sin el campo, se cae al denominador viejo."""
+    if "fallos_efectivos" in datos:
+        return int(datos["fallos_efectivos"])
+    return int(datos["alcanzaron_votacion"])
+
+
+def notas_denominador_parcial(
+    modos: list[tuple[str, dict[str, Any]]],
+) -> list[str]:
+    """Modos donde no toda request que llegó a Votación era un fallo inyectado."""
+    notas: list[str] = []
+    for modo, datos in modos:
+        efectivos = denominador_deteccion(datos)
+        alcanzaron = int(datos["alcanzaron_votacion"])
+        if efectivos < alcanzaron:
+            notas.append(
+                f"`{modo}`: {efectivos} fallos efectivos de {alcanzaron} requests "
+                "que alcanzaron Votación (el modo no altera todas las solicitudes)."
+            )
+    return notas
 
 
 def main() -> int:
@@ -67,33 +137,27 @@ def main() -> int:
         "",
         "Umbral: **≥ 99 %** de los cálculos erróneos inyectados, detectados.",
         "",
-        "El denominador son los **cálculos erróneos inyectados**, no las",
-        "cotizaciones enviadas. Un modo de fallo puede ser neutro para ciertas",
-        "entradas: `factor_skip` omite el factor de clase ocupacional, que para",
-        "la clase 1 ya vale `1.00`, así que en esas solicitudes la réplica",
-        "averiada calcula el valor correcto y no hay error que detectar. Cada",
-        "detección se atribuye a su journey cruzando por `correlation_id`, de",
-        "modo que un incidente ajeno al fallo inyectado no puede inflar la tasa.",
+        "El denominador son los **fallos efectivos**: solicitudes en las que el",
+        "modo sí altera el resultado (o deja a B muda) y que llegaron a Votación.",
+        "`factor_skip` no cambia la prima de la clase ocupacional 1, cuyo factor",
+        "ya vale `1.00`; esas requests no entran al denominador. La tasa es",
+        "incidentes registrados en Gestión de Errores sobre ese denominador.",
         "",
-        "| Modo de fallo | Vía de detección esperada | Cotizaciones | Neutras "
-        "| Errores inyectados | Detectados | Tasa |",
-        "|---|---|---:|---:|---:|---:|---:|",
+        "| Modo de fallo | Vía de detección esperada | Efectivos | Incidentes | Tasa |",
+        "|---|---|---:|---:|---:|",
     ]
     tasas: list[float] = []
     for modo, datos in modos:
-        det = datos.get("deteccion", {})
-        tasa = det.get("tasa", 0.0)
+        tasa = float(datos.get("tasa_deteccion", 0.0))
         tasas.append(tasa)
         lineas.append(
-            f"| `{modo}` | {VIA.get(modo, '—')} | {det.get('journeys', 0)} "
-            f"| {det.get('journeys_neutros', 0)} "
-            f"| {det.get('con_error_inyectado', 0)} | {det.get('detectados', 0)} "
-            f"| {tasa * 100:.2f} % |"
+            f"| `{modo}` | {VIA.get(modo, '—')} | {denominador_deteccion(datos)} "
+            f"| {datos.get('incidentes_registrados', 0)} | {tasa * 100:.2f} % |"
         )
 
     peor = min(tasas) if tasas else 0.0
-    total_inc = sum(d.get("deteccion", {}).get("detectados", 0) for _, d in modos)
-    total_req = sum(d.get("deteccion", {}).get("con_error_inyectado", 0) for _, d in modos)
+    total_inc = sum(d.get("incidentes_registrados", 0) for _, d in modos)
+    total_req = sum(denominador_deteccion(d) for _, d in modos)
     global_ = total_inc / total_req if total_req else 0.0
     lineas += [
         "",
@@ -103,6 +167,11 @@ def main() -> int:
         f"(umbral {UMBRAL_DETECCION * 100:.0f} % en TODOS los modos).",
         "",
     ]
+    notas = notas_denominador_parcial(modos)
+    for nota in notas:
+        lineas.append(f"- {nota}")
+    if notas:
+        lineas.append("")
 
     # --- ASR-12 --------------------------------------------------------------
     lineas += [
@@ -210,15 +279,19 @@ def main() -> int:
         "",
         "Detectar eso exigiría N-version programming real —tres",
         "implementaciones independientes del cálculo bajo el mismo contrato—,",
-        "que se descartó por coste. Las reglas de validez de §2.4 cubren",
-        "parcialmente el hueco: atrapan el resultado estructuralmente imposible",
-        "aunque las tres réplicas coincidan, pero no un desvío plausible.",
+        "que se descartó por coste. Un desvío plausible idéntico en A, B y C",
+        "pasaría la votación y el oráculo del cliente lo marcaría como prima",
+        "errónea en la corrida C, no como incidente de ASR-11.",
         "",
     ]
 
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
     SALIDA.write_text("\n".join(lineas), encoding="utf-8")
-    print(f"informe escrito en {SALIDA.relative_to(RAIZ)}")
+    try:
+        mostrado: Path = SALIDA.relative_to(RAIZ)
+    except ValueError:
+        mostrado = SALIDA
+    print(f"informe escrito en {mostrado}")
     return 0
 
 

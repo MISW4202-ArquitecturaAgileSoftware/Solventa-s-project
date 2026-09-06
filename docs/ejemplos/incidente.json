@@ -17,12 +17,7 @@
         "explicacion": {
           "edad_calculada": 38,
           "tasa_base_mil": "0.26",
-          "factores": {
-            "fumador": "1.00",
-            "clase_ocupacional": "1.12",
-            "plazo": "1.08",
-            "canal": "0.95"
-          },
+          "factores": {"fumador": "1.00", "clase_ocupacional": "1.12", "plazo": "1.08", "canal": "0.95"},
           "gasto_administrativo": "0.12",
           "margen": "0.08"
         }
@@ -42,12 +37,7 @@
         "explicacion": {
           "edad_calculada": 38,
           "tasa_base_mil": "0.26",
-          "factores": {
-            "fumador": "1.00",
-            "clase_ocupacional": "1.12",
-            "plazo": "1.08",
-            "canal": "0.95"
-          },
+          "factores": {"fumador": "1.00", "clase_ocupacional": "1.12", "plazo": "1.08", "canal": "0.95"},
           "gasto_administrativo": "0.12",
           "margen": "0.08"
         }
@@ -67,12 +57,7 @@
         "explicacion": {
           "edad_calculada": 38,
           "tasa_base_mil": "0.26",
-          "factores": {
-            "fumador": "1.00",
-            "clase_ocupacional": "1.12",
-            "plazo": "1.08",
-            "canal": "0.95"
-          },
+          "factores": {"fumador": "1.00", "clase_ocupacional": "1.12", "plazo": "1.08", "canal": "0.95"},
           "gasto_administrativo": "0.12",
           "margen": "0.08"
         }
@@ -80,5 +65,5 @@
       "error": null
     }
   ],
-  "detalle": "B devolvió un resultado distinto al acordado por A y C"
+  "detalle": null
 }

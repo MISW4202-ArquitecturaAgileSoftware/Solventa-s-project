@@ -13,13 +13,11 @@ SOLICITUD="${1:-docs/ejemplos/solicitud.json}"
 # Fecha de cálculo congelada: la normaliza Votación, no las réplicas. Fijarla
 # hace que el resultado esperado (90348.41) sea reproducible.
 FECHA_CALCULO="${FECHA_CALCULO:-2026-08-31}"
-TARIFARIO_VERSION="${TARIFARIO_VERSION:-2026.02}"
-
-SOBRE="$(python - "$SOLICITUD" "$FECHA_CALCULO" "$TARIFARIO_VERSION" <<'PY'
+SOBRE="$(python - "$SOLICITUD" "$FECHA_CALCULO" <<'PY'
 import json, sys, uuid
 from datetime import UTC, datetime
 
-ruta, fecha_calculo, version = sys.argv[1:4]
+ruta, fecha_calculo = sys.argv[1:3]
 with open(ruta, encoding="utf-8") as f:
     payload = json.load(f)
 
@@ -29,7 +27,6 @@ sobre = {
     "version": "1",
     "emitido_en": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
     "fecha_calculo": fecha_calculo,
-    "tarifario_version": version,
     "payload": payload,
 }
 print(json.dumps(sobre, ensure_ascii=False, separators=(",", ":")))

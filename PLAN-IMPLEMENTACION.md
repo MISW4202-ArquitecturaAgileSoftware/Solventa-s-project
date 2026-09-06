@@ -14,7 +14,7 @@ coincide con el esperado, se corrige antes de avanzar.
 Orden de construcción (dictado por las dependencias del diagrama):
 
 ```
-F0 andamiaje  →  F1 solventa-common  →  F2 queue-service  →  F3 cotizador
+F0 andamiaje  →  F1 contratos locales →  F2 queue-service  →  F3 cotizador
               →  F4 gestion-errores  →  F5 votacion       →  F6 api-gateway
               →  F7 experimento
 ```
@@ -30,6 +30,7 @@ porque solo enruta: no puede probarse sin un journey completo detrás.
 | Semántica de la cola | **Fan-out**: cada solicitud llega a A, B y C |
 | Diversidad de réplicas | **Idénticas**, una sola imagen, fallo por `FAULT_MODE` |
 | Layout | `services/<servicio>/`, `requirements.txt` por servicio |
+| Autonomía | Cada servicio contiene sus contratos y utilidades; no existe una librería compartida |
 | Compose | **Un `docker-compose.yaml` por servicio**, unidos por `include:` en la raíz |
 | Cola | `redis:8.10-alpine` (Streams para la ida, listas para la vuelta) |
 | Runtime | Python 3.14.6 (pyenv) |
@@ -40,8 +41,10 @@ porque solo enruta: no puede probarse sin un journey completo detrás.
 
 # 1. Contratos
 
-Los contratos se definen **antes** que cualquier servicio y viven en
-`libs/solventa-common`. Ningún servicio redefine un contrato por su cuenta.
+Cada servicio conserva dentro de su propio paquete los contratos que consume o
+produce. La duplicación pequeña es deliberada: permite construir, probar y
+mantener una carpeta sin depender de código fuente externo. Las pruebas de
+contrato verifican la compatibilidad de los mensajes entre servicios.
 
 ## 1.1 Identificación de la petición
 
@@ -55,7 +58,6 @@ los Streams de Redis, lo que hace depurable el experimento.
 | `request_id` | El cliente, en el cuerpo JSON | La petición del cliente | Trazabilidad del lado del cliente; es obligatorio y se conserva tal cual |
 | `correlation_id` | API Gateway (`uuid7`) | El journey completo | Une la solicitud con los 3 cálculos y con el veredicto |
 | `cotizador_id` | Cada réplica, de `COTIZADOR_ID` | Una réplica | Identifica quién produjo cada resultado (`A`, `B`, `C`) |
-| `resultado_hash` | Cada réplica | Un resultado | Comparación exacta en la votación |
 
 El gateway rechaza las solicitudes sin `request_id`. El `correlation_id` viaja en:
 
@@ -144,9 +146,9 @@ X-Correlation-Id: 01a05aa8-24a1-753e-b019-a0810d66a3f6
 }
 ```
 
-`estado` toma tres valores: `COTIZADO` (consenso limpio), `COTIZADO_DEGRADADO`
-(hubo divergencia o faltaron respuestas, pero se resolvió un valor correcto) y
-`RECHAZADO` (no fue posible resolver un valor confiable).
+`estado` toma dos valores: `COTIZADO` cuando al menos dos réplicas válidas
+coinciden y `RECHAZADO` cuando no existe quórum. Una sola respuesta nunca se
+entrega al cliente porque no tiene una segunda opinión que la confirme.
 
 ### Bloque de consenso (evidencia del experimento)
 
@@ -197,7 +199,6 @@ apagado, la divergencia sigue reportándose íntegra a `gestion-errores`.
   "version": "1",
   "emitido_en": "2026-08-31T20:41:07.470Z",
   "fecha_calculo": "2026-08-31",
-  "tarifario_version": "2026.02",
   "payload": { "...solicitud normalizada..." }
 }
 ```
@@ -210,18 +211,15 @@ apagado, la divergencia sigue reportándose íntegra a `gestion-errores`.
   "tipo": "cotizacion.calculada",
   "cotizador_id": "B",
   "estado": "OK",
-  "resultado_hash": "9f2a...",
   "duracion_ms": 7,
   "resultado": { "...bloques cotizacion y explicacion..." }
 }
 ```
 
-> **Normalización antes del fan-out.** Votación fija `fecha_calculo` y
-> `tarifario_version` **una sola vez** y las mete en el mensaje. Si cada réplica
-> resolviera la fecha con `date.today()`, una petición a medianoche produciría
-> edades distintas y una divergencia falsa. Las réplicas reciben una entrada
-> completamente determinada; su única fuente de variación permitida es el fallo
-> inyectado.
+> **Normalización antes del fan-out.** Votación fija `fecha_calculo` una sola
+> vez. Si cada réplica resolviera la fecha con `date.today()`, una petición a
+> medianoche podría producir edades distintas. La versión del tarifario es
+> configuración propia de cada Cotizador, dueño del cálculo.
 
 ---
 
@@ -295,49 +293,25 @@ prima_mensual = 78624 × 0.95 × 1.12 × 1.08                = 90348.41
 prima_anual   = 90348.41 × 12                             = 1084180.92
 ```
 
-## 2.4 Regla de validez (la que hace posible ASR-11)
+## 2.4 Premisa de la votación
 
-Un resultado es **estructuralmente inválido** si:
-
-```
-ratio = prima_mensual / suma_asegurada        debe cumplir   0.00005 ≤ ratio ≤ 0.02
-prima_mensual > 0
-prima_anual == round_half_up(prima_mensual × 12, 2)
-tarifario_version == la del mensaje de solicitud
-```
-
-Esto da a Votación **dos vías de detección independientes**, y hay que
-implementarlas ambas:
-
-- **Detección por rango** (funciona incluso con una sola respuesta): el resultado
-  viola una regla de validez.
-- **Detección por divergencia** (necesita ≥2 respuestas): los `resultado_hash`
-  no coinciden entre réplicas.
-
-## 2.5 Hash del resultado
-
-```
-resultado_hash = sha256(json_canonico({
-    "prima_mensual", "prima_anual", "tasa_base_mil",
-    "factores", "tarifario_version", "edad_calculada"
-}))
-```
-
-JSON canónico = claves ordenadas, separadores compactos, sin espacios, UTF-8.
-El hash **excluye** `cotizador_id`, `duracion_ms` y cualquier marca de tiempo:
-esos campos varían por réplica y no son parte del resultado a comparar.
+Votación no recalcula ni valida el negocio. Compara directamente
+el resultado funcional completo y decide por mayoría 2 de 3. La táctica supone
+que como máximo
+falla una réplica. Si dos cotizadores producen el mismo valor incorrecto, ese
+valor formará mayoría y será elegido.
 
 ## 2.6 Modos de fallo inyectables (`FAULT_MODE`)
 
 | Valor | Efecto | Qué mecanismo de detección ejercita |
 |---|---|---|
 | `none` | Cálculo correcto | — (línea base) |
-| `premium_offset` | Multiplica la prima final por 1.15 | Divergencia de hash |
-| `factor_skip` | Ignora `f_clase_ocupacional` | Divergencia de hash |
-| `rate_table_stale` | Usa el tarifario `2025.11` | Divergencia + versión |
-| `rounding_drift` | Redondea con `ROUND_DOWN` a 0 decimales | Divergencia de hash |
-| `out_of_range` | Devuelve `prima_mensual` × 500 | Regla de rango |
-| `silent_zero` | Devuelve `prima_mensual = 0` | Regla de rango |
+| `premium_offset` | Multiplica la prima final por 1.15 | Divergencia de prima |
+| `factor_skip` | Ignora `f_clase_ocupacional` | Divergencia de prima |
+| `rate_table_stale` | Usa el tarifario `2025.11` | Divergencia de prima |
+| `rounding_drift` | Redondea con `ROUND_DOWN` a 0 decimales | Divergencia de prima |
+| `out_of_range` | Devuelve `prima_mensual` × 500 | Divergencia de prima |
+| `silent_zero` | Devuelve `prima_mensual = 0` | Divergencia de prima |
 | `slow` | Duerme 400 ms antes de responder | Quórum parcial por timeout |
 | `crash` | No responde (excepción no capturada) | Quórum parcial |
 
@@ -361,7 +335,6 @@ Solventa-s-project/
 ├── .env example.env                       # únicos archivos de entorno, en la raíz
 ├── docker-compose.yaml                    # solo include: + redes compartidas
 ├── pyproject.toml                         # tooling: ruff, mypy, pytest
-├── libs/solventa-common/{pyproject.toml, src/solventa_common/, tests/}
 ├── services/
 │   ├── api-gateway/{docker-compose.yaml, Dockerfile, requirements.txt, src/, tests/}
 │   ├── votacion/{docker-compose.yaml, Dockerfile, requirements.txt, src/, tests/}
@@ -385,8 +358,8 @@ include:
 ```
 
 Con `include`, las rutas relativas de cada archivo resuelven contra **su propio
-directorio**; por eso cada servicio declara `context: ../..` y
-`dockerfile: services/<servicio>/Dockerfile`, para que `libs/` entre en la imagen.
+directorio**; por eso cada servicio declara `context: .` y puede construirse
+usando únicamente los archivos de su carpeta.
 
 **Pasos**
 
@@ -397,8 +370,8 @@ directorio**; por eso cada servicio declara `context: ../..` y
 3. `example.env` commiteado + `.env` local, ambos en la raíz, con: `STACK=solventa`,
    `TAG=dev`, `REDIS_URL`, `QUORUM`, `TIMEOUT_CONSENSO_MS`, `EXPOSE_CONSENSUS`,
    `FAULT_A/B/C`.
-4. Mover los directorios existentes a `services/`; crear `libs/`, `scripts/`,
-   `docs/` y mover ahí `ASRs-experimento.md` e `image.png`.
+4. Mover los directorios existentes a `services/`; crear `scripts/` y `docs/`,
+   y mover ahí `ASRs-experimento.md` e `image.png`.
 5. `docker-compose.yaml` raíz: solo `include:` de los cinco compose y la
    declaración de las redes. Son cinco, no tres:
 
@@ -427,7 +400,7 @@ directorio**; por eso cada servicio declara `context: ../..` y
 
 ```bash
 docker compose config >/dev/null && echo OK
-ls services/{api-gateway,cotizador,gestion-errores,votacion} libs scripts docs
+ls services/{api-gateway,cotizador,gestion-errores,votacion} scripts docs
 ```
 
 **Resultado esperado:** `OK` impreso, sin advertencias de Compose; los cuatro
@@ -436,37 +409,34 @@ entorno fuera de la raíz.
 
 ---
 
-## F1 · `libs/solventa-common`
+## F1 · Contratos y utilidades locales
 
-**Objetivo:** el contrato y el cálculo, probados en aislamiento, sin Flask ni
-Redis de por medio.
+**Objetivo:** que cada servicio pueda construirse y probarse desde su carpeta,
+sin una librería compartida ni un contexto de Docker situado en la raíz.
 
 **Pasos**
 
-1. `contracts.py`: dataclasses `frozen=True` — `Asegurado`, `SolicitudCotizacion`,
-   `ResultadoCotizacion`, `SobreSolicitud`, `SobreRespuesta`. Serialización
-   explícita a/desde `dict` con `Decimal` como `str`.
+1. Cada paquete contiene su propio `contracts.py` con únicamente las dataclasses
+   que usa. La serialización es explícita y los `Decimal` viajan como `str`.
 2. `tarifario.py`: tablas `2026.02` y `2025.11` como constantes `Decimal`, con la
    función `tasa_base_mil(edad, version)`.
 3. `pricing.py`: `calcular(solicitud, fecha_calculo, version) -> ResultadoCotizacion`
-   implementando §2.3, y `validar(resultado, solicitud) -> list[Violacion]`
-   implementando §2.4.
-4. `hashing.py`: `json_canonico()` y `resultado_hash()` según §2.5.
-5. `ids.py`: `nuevo_correlation_id()` sobre `uuid.uuid7()`.
-6. `logging_.py`: logging estructurado JSON con `correlation_id` obligatorio.
-7. `errors.py`: excepciones de dominio + traductor a RFC 9457.
-8. `pyproject.toml` de la librería (instalable con `pip install ./libs/solventa-common`).
-9. Tests: ejemplo canónico de §2.3, tabla de rangos de edad, `parametrize` de
-   los 4 casos de validación, y **test de determinismo**: 1000 ejecuciones de la
-   misma entrada producen el mismo hash.
+   implementando §2.3.
+4. Los servicios que originan recorridos contienen `ids.py`; el Cotizador
+   recibe el `correlation_id` en el sobre y no genera uno.
+5. Logging estructurado JSON con `correlation_id` obligatorio.
+6. `errors.py`: excepciones propias; solo los servicios HTTP incluyen traducción
+   a RFC 9457.
+7. Los tests de dominio pertenecen al cotizador, dueño del cálculo y tarifario.
+8. Tests: ejemplo canónico de §2.3, tabla de rangos de edad y determinismo del
+   resultado para una misma entrada.
 
 **Validación**
 
 ```bash
-pip install ./libs/solventa-common
-pytest libs/solventa-common -q
+PYTHONPATH=services/cotizador/src pytest services/cotizador/tests -q
 python -c "
-from solventa_common.pricing import calcular
+from cotizador.pricing import calcular
 # ...ejemplo canónico...
 print(r.prima_mensual, r.prima_anual)"
 ```
@@ -557,9 +527,7 @@ docker compose exec redis redis-cli LRANGE cot:resp:<correlation_id> 0 -1
 
 **Resultado esperado:** `uid=10001`; las tres réplicas en ejecución; la lista de
 respuestas contiene **exactamente 3 elementos**, con `cotizador_id` `A`, `B` y
-`C`, `prima_mensual = "90348.41"` en los tres y **el mismo `resultado_hash`**.
-Un hash distinto entre réplicas sanas significa que el cálculo no es
-determinista: hay que arreglarlo aquí, no en Votación.
+`C`, y `prima_mensual = "90348.41"` en los tres.
 
 Segunda validación, con fallo inyectado:
 
@@ -568,8 +536,7 @@ FAULT_B=premium_offset docker compose up -d cotizador-b
 # volver a publicar y releer la lista
 ```
 
-**Resultado esperado:** A y C mantienen `90348.41` y su hash; B devuelve
-`103900.67` con un hash distinto.
+**Resultado esperado:** A y C mantienen `90348.41`; B devuelve `103900.67`.
 
 ## F4 · `gestion-errores`
 
@@ -580,17 +547,15 @@ antes que Votación, que es quien lo llama.
 
 1. `POST /v1/incidentes` con el envelope de incidente: `correlation_id`,
    `tipo` (`divergencia_resultado` \| `sin_quorum` \|
-   `replica_no_responde`), `replicas_divergentes`, `valores_recibidos`,
-   `detectado_en` y `detalle`. Cada valor recibido conserva el resultado
-   completo o el error observado en la réplica.
+   `replica_no_responde`), `replicas_divergentes`, `valores_recibidos` con el
+   resultado completo de cada réplica, y `detectado_en`.
 2. Persistencia: `append` a JSONL en un volumen nombrado. Suficiente y auditable
    para el experimento; una base de datos aquí sería andamiaje.
 3. `GET /v1/incidentes?correlation_id=...` para las aserciones del experimento.
 4. `GET /v1/metricas`: contadores de incidentes por tipo — de aquí sale el
    numerador del ≥99 % de ASR-11.
-5. Persiste antes de responder `201 Created`, para que la confirmación signifique
-   que la evidencia ya existe. Votación hace este POST en un hilo de segundo
-   plano y por eso el cliente de cotización no espera al Gestor de Errores.
+5. El endpoint escribe antes de responder `201 Created`. Votación realiza este
+   POST desde su reportero en segundo plano, fuera de la respuesta al cliente.
 6. `Dockerfile` + `docker-compose.yaml` (red `backend` únicamente).
 
 **Validación**
@@ -614,13 +579,12 @@ latencia.
 
 **Pasos**
 
-1. `POST /v1/cotizaciones` interno: valida, **normaliza** (fija `fecha_calculo`
-   y `tarifario_version`, §1.4) y genera el envelope.
+1. `POST /v1/cotizaciones` interno: fija `fecha_calculo` y genera el envelope.
 2. `XADD cot:req` una sola vez — el fan-out lo hacen los consumer groups.
 3. Recolección: `BLPOP cot:resp:{correlation_id}` en bucle con **presupuesto
    global de 250 ms**, no un timeout por respuesta.
 4. **Corte anticipado por quórum, con ventana de gracia.** En cuanto hay 2
-   huellas válidas iguales el veredicto ya está decidido, pero no se corta en
+   primas mensuales iguales el veredicto ya está decidido, pero no se corta en
    seco: se abre una ventana de **25 ms** para recoger a las rezagadas. Esa
    espera NO cambia lo que se responde; existe solo para poder *ver* a la
    réplica divergente y registrarla.
@@ -631,28 +595,26 @@ latencia.
    llegada. Con tres réplicas, eso ocurriría en dos de cada tres casos.
 
    El corte sigue acotando el peor caso: una réplica `slow` (400 ms) o `crash`
-   nunca cuesta el presupuesto entero. Y el corte por quórum **solo se abre con
-   respuestas que ya pasaron las reglas de validez**: dos réplicas rotas del
-   mismo modo producen la misma huella, y contarlas como acuerdo cortaría la
-   recolección antes de leer a la réplica sana.
+   nunca cuesta el presupuesto entero.
 
    Nota de infraestructura: Redis revisa los clientes bloqueados a `hz` veces
    por segundo. Con el valor por defecto (10) un timeout de `BLPOP` de 25 ms
    tarda ~105 ms en vencer. `queue-service/redis.conf` fija `hz 100` para bajar
    esa resolución a ~10 ms.
 5. Resolución del veredicto, en este orden:
-   - descartar los resultados que violen una regla de validez (§2.4);
-   - agrupar los supervivientes por `resultado_hash`;
+   - descartar respuestas técnicas sin resultado;
+   - agrupar directamente por el resultado funcional completo;
    - si un grupo tiene ≥ `QUORUM` (=2) → `COTIZADO`, ese es el valor;
-   - si hay respuestas pero ninguna alcanza quórum → `COTIZADO_DEGRADADO` si
-     exactamente una supera todas las reglas de validez; si no, `RECHAZADO` (503);
+   - si hay respuestas pero ninguna alcanza quórum → `RECHAZADO` (503);
    - si vence el presupuesto sin respuestas → `RECHAZADO` (504).
-6. Reporte a `gestion-errores` **después** de haber respondido al cliente, en un
-   hilo aparte (`fire-and-forget` con reintento acotado).
+6. Reporte a `gestion-errores` en un hilo aparte (`fire-and-forget`), sin
+   bloquear la respuesta al cliente.
 7. `limpieza`: `DEL cot:resp:{correlation_id}` tras resolver.
-8. Métricas: `latencia_consenso_ms`, `respuestas_recibidas`, `divergencias`.
+8. Evidencia: `latencia_consenso_ms`, `respuestas_recibidas` y divergencias en
+   el bloque de consenso; incidentes persistidos por Gestión de Errores.
 9. Tests con dobles de Redis: 3 iguales · 2 iguales + 1 divergente · 3 distintos ·
-   1 sola respuesta · 0 respuestas · 1 fuera de rango + 2 iguales.
+   1 sola respuesta · 0 respuestas · 1 divergente + 2 iguales · respuesta
+   duplicada · correlación ajena.
 
 **Validación**
 
@@ -675,7 +637,7 @@ curl -s localhost:8003/v1/metricas | jq
 | Sin fallo | `COTIZADO` | `90348.41` | `false` | no |
 | `FAULT_B=premium_offset` | `COTIZADO` | **`90348.41`** | `true`, `replicas_divergentes: ["B"]` | sí |
 | `FAULT_B=crash` | `COTIZADO` | `90348.41` | `true`, `respuestas_recibidas: 2` | sí |
-| `FAULT_B` y `FAULT_C` distintos | `COTIZADO_DEGRADADO` | valor de A | `true` | sí |
+| `FAULT_B` y `FAULT_C` distintos | `RECHAZADO` | no se entrega | `true` | sí |
 
 La celda en negrita es ASR-12: **el cliente recibe el valor correcto pese al
 fallo activo**. Y `latencia_consenso_ms` debe salir por debajo de 250 ms en
@@ -722,18 +684,10 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 1. `scripts/experiment/inyectar.sh <replica> <modo>`: reinicia una réplica con su
    `FAULT_MODE` y comprueba que el proceso quede en ejecución.
-2. `scripts/experiment/carga.py`: 500 cotizaciones/min sostenidas, entradas
-   variadas (edad, suma, plazo, canal, fumador, clase ocupacional) para no medir
-   siempre el mismo camino del tarifario, generadas de forma **determinista** a
-   partir del índice para que dos corridas sean comparables.
-
-   Se escribe en Python y no en k6 —como se planteó al principio— por dos
-   razones. La práctica: k6 no está instalado. La de fondo: el script importa
-   `solventa_common` y **recalcula la prima esperada de cada solicitud**, así
-   que puede verificar una a una si el sistema entregó el valor correcto. Esa
-   comprobación *es* la métrica «0 primas erróneas entregadas» de ASR-12; con un
-   generador que solo mide latencias habría que confiar en el enmascaramiento en
-   vez de verificarlo.
+2. `scripts/experiment/locustfile.py` (Locust): 500 cotizaciones/min sostenidas,
+   entradas variadas (edad, suma, plazo, canal) para no medir siempre el mismo
+   camino. Detalle de fases y denominador en
+   `docs/PLAN-IMPLEMENTACION-LOCUST.md`.
 3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra el p95 limpio.
 4. **Corrida B — detección:** inyecta cada uno de los 8 modos de fallo, 1000
    cotizaciones por modo, y contrasta los incidentes de `/v1/metricas` contra el
@@ -747,7 +701,7 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 
 | ASR | Métrica | Umbral | Cómo se obtiene |
 |---|---|---|---|
-| **ASR-11** | Tasa de detección | **≥ 99 %** | journeys con incidente ÷ journeys con error inyectado, por modo |
+| **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes registrados ÷ fallos efectivos, por modo |
 | **ASR-12** | Retardo añadido | **≤ 300 ms** sobre el p95 base | `p95(corrida C) − p95(corrida A)` |
 | **ASR-12** | Primas erróneas entregadas | **0** | ninguna respuesta distinta del valor de consenso sano |
 
