@@ -6,6 +6,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. El contenedor en runtime
+      # sigue en data-votacion/backend/ops.
+      network: host
     restart: unless-stopped
     networks:
       # data-votacion: para publicar en el stream y recoger las respuestas.

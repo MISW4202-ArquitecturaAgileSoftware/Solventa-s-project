@@ -22,6 +22,8 @@ x-cotizador: &cotizador
     # Cada cotizador se construye únicamente con el contenido de esta carpeta.
     context: .
     dockerfile: Dockerfile
+    # Solo el build: pip necesita el DNS del host. Runtime sigue aislado en data.
+    network: host
   restart: unless-stopped
   networks:
     - data-cotizadores
