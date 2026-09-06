@@ -20,7 +20,7 @@ def test_modo_none_no_cuenta_fallos_efectivos() -> None:
     assert resumen["alcanzaron_votacion"] == 1
     assert resumen["fallos_efectivos"] == 0
     assert resumen["primas_erroneas"] == 0
-    assert resumen["latencia_ms"]["p95"] == 9.09
+    assert resumen["latencia_ms"]["media"] == 9.09
     assert resumen["por_estado_cotizacion"] == {"COTIZADO": 1}
 
 

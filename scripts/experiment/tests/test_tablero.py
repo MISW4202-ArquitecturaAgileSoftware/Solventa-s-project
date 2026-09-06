@@ -52,7 +52,7 @@ def test_asr12_cuando_existen_a_y_c(tmp_path: Path) -> None:
         {
             "enviadas": 200,
             "tasa_real_por_minuto": 500,
-            "latencia_ms": {"p50": 10, "p95": 20, "p99": 30},
+            "latencia_ms": {"media": 20, "p50": 10, "p99": 30},
             "primas_erroneas": 0,
         }
     )
@@ -61,7 +61,7 @@ def test_asr12_cuando_existen_a_y_c(tmp_path: Path) -> None:
         {
             "enviadas": 200,
             "tasa_real_por_minuto": 500,
-            "latencia_ms": {"p50": 11, "p95": 22, "p99": 33},
+            "latencia_ms": {"media": 22, "p50": 11, "p99": 33},
             "primas_erroneas": 0,
             "por_estado_cotizacion": {"COTIZADO": 200},
         }

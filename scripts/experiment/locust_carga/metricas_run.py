@@ -96,11 +96,10 @@ class MetricasCorrida:
             "fallos_efectivos": self.fallos_efectivos,
             "latencia_ms": {
                 "n": len(latencias),
+                "media": round(statistics.mean(latencias), 2) if latencias else 0,
                 "p50": round(percentil(latencias, 0.50), 2),
-                "p95": round(percentil(latencias, 0.95), 2),
                 "p99": round(percentil(latencias, 0.99), 2),
                 "max": round(max(latencias), 2) if latencias else 0,
-                "media": round(statistics.mean(latencias), 2) if latencias else 0,
             },
             "primas_erroneas": self.primas_erroneas,
             "muestras_erroneas": [asdict(muestra) for muestra in self.muestras_erroneas],

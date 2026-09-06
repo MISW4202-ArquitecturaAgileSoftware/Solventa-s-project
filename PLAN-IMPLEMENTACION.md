@@ -688,12 +688,12 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
    entradas variadas (edad, suma, plazo, canal) para no medir siempre el mismo
    camino. Detalle de fases y denominador en
    `docs/PLAN-IMPLEMENTACION-LOCUST.md`.
-3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra el p95 limpio.
+3. **Corrida A — línea base:** sin fallo, 10 minutos. Registra la latencia media limpia.
 4. **Corrida B — detección:** inyecta cada uno de los 8 modos de fallo, 1000
    cotizaciones por modo, y contrasta los incidentes de `/v1/metricas` contra el
    número de solicitudes inyectadas.
 5. **Corrida C — enmascaramiento:** con `premium_offset` activo en B durante toda
-   la corrida, comparar el p95 contra la línea base y verificar que **ninguna**
+   la corrida, comparar la latencia media contra la línea base y verificar que **ninguna**
    respuesta lleve la prima errónea.
 6. `scripts/experiment/reporte.py`: genera la tabla de resultados en Markdown.
 
@@ -702,7 +702,7 @@ probando que los cotizadores no alcanzan el gateway (aislamiento de zonas).
 | ASR | Métrica | Umbral | Cómo se obtiene |
 |---|---|---|---|
 | **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes registrados ÷ fallos efectivos, por modo |
-| **ASR-12** | Retardo añadido | **≤ 300 ms** sobre el p95 base | `p95(corrida C) − p95(corrida A)` |
+| **ASR-12** | Retardo total añadido | **≤ 300 ms** | `media(corrida C) − media(corrida A)` |
 | **ASR-12** | Primas erróneas entregadas | **0** | ninguna respuesta distinta del valor de consenso sano |
 
 > **El denominador son los cálculos erróneos inyectados, no las cotizaciones

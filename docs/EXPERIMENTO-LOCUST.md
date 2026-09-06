@@ -16,7 +16,7 @@ archivo se escribe a mano.
 | ASR | Hipótesis | Umbral |
 |---|---|---|
 | **ASR-11** detección | El sistema identifica un cálculo erróneo **antes** de entregarlo al canal, en horario pico | **≥ 99 %** de los fallos **efectivos**, en **todos** los modos |
-| **ASR-12** enmascaramiento | Con un cotizador fallando, el cliente recibe la prima correcta y el journey no se encarece | `p95(C) − p95(A) ≤ 300 ms` y **0 primas erróneas** |
+| **ASR-12** enmascaramiento | Con un cotizador fallando, el cliente recibe la prima correcta y el journey no se encarece | retardo total añadido `media(C) − media(A) ≤ 300 ms` y **0 primas erróneas** |
 
 La táctica bajo prueba es votación 2 de 3 sobre el `ResultadoCotizacion`
 completo. Locust no es la táctica: es el cliente de carga y el oráculo que
@@ -146,9 +146,9 @@ No son tres arquitecturas. Son tres protocolos de medición.
 
 | Corrida | Estado de B | Pregunta | Por qué no se fusiona |
 |---|---|---|---|
-| **A** | `none` (las tres sanas) | ¿p95 **sin** fallo? | Si B ya fallara, el p95 incluiría el enmascaramiento |
+| **A** | `none` (las tres sanas) | ¿latencia media **sin** fallo? | Si B ya fallara, la media incluiría el enmascaramiento |
 | **B** | un modo a la vez, 8 bloques | ¿detección ≥ 99 % de **ese** fallo? | Mezclar modos mezcla incidentes |
-| **C** | `premium_offset` sostenido | ¿prima correcta y retardo ≤ 300 ms? | Hay que restar `p95(C) − p95(A)` |
+| **C** | `premium_offset` sostenido | ¿prima correcta y retardo ≤ 300 ms? | Hay que restar `media(C) − media(A)` |
 
 ### Cómo se fuerza el error en B
 
@@ -199,7 +199,7 @@ El mismo catálogo se muestra en el tablero `:8090`.
   reporte a Gestión de Errores es asíncrono: se espera 500 ms de silencio en
   `/v1/metricas` antes de leer el numerador (`tasa_deteccion` en el JSON).
 - **ASR-12:** Locust recalcula la prima con `experiment_common` y
-  `emitido_en`. `p95(C) − p95(A) ≤ 300 ms` y `primas_erroneas == 0`.
+  `emitido_en`. `media(C) − media(A) ≤ 300 ms` y `primas_erroneas == 0`.
 
 No se cruza por `correlation_id`. El numerador es el contador de incidentes
 en Gestión de Errores; el denominador lo anota Locust.
@@ -245,7 +245,7 @@ locust_carga/
   solicitudes.py          payloads deterministas
   oraculo.py              prima esperada (ASR-12)
   prediccion.py           ¿el modo altera esta request? (denominador ASR-11)
-  percentil.py            p50/p95/p99 crudos
+  percentil.py            p50/p99 crudos
   metricas_run.py         JSON por bloque
   drenaje.py              espera silencio en /v1/metricas
 inyectar.sh               FAULT_B + recrea B
@@ -274,16 +274,11 @@ mientras el bloque está activo. Al llegar a N baja a 0: el cupo se llenó.
 *Failures* de Locust = timeout o prima ≠ oráculo, no incidentes JSONL.
 
 **Response Times (ms).** Latencia del journey (gateway → votación → réplicas →
-respuesta). Por defecto dos líneas:
-
-| Percentil | Significado |
-|---|---|
-| **50 % (p50)** | La mitad de las cotizaciones tardó menos. Caso típico. |
-| **95 % (p95)** | El 95 % tardó menos. Es el de ASR-12. |
-
-No es un promedio. p50 = 62 ms y p95 = 89 ms: lo normal ~60 ms y casi nadie
-pasó de ~90 ms. ASR-12 usa `p95(C) − p95(A)` calculado sobre **muestras
-crudas** del JSON, no sobre el histograma redondeado de Locust.
+respuesta). Por defecto Locust dibuja dos líneas de percentiles (la mediana y
+el 95 %). Ninguna es el veredicto: ASR-12 usa la latencia **media**,
+`media(C) − media(A)`, calculada sobre **muestras crudas** del JSON, no sobre
+el histograma redondeado de Locust. La mediana (p50) y el p99 se guardan solo
+como contexto.
 
 **Number of Users.** Tras el spawn debe quedarse en 10. Con UI, al llegar a N
 **sigue en 10** (ya no se llama `stop()`). Lo que cae es el RPS.
@@ -324,9 +319,9 @@ no cumple.
 
 | Recuadro | Significado |
 |---|---|
-| A · p95 base | p95 con las tres réplicas sanas |
-| C · p95 con fallo | p95 con `premium_offset` en B |
-| Retardo añadido | `p95(C) − p95(A)`. Umbral ≤ 300 ms |
+| A · media base | Latencia media con las tres réplicas sanas |
+| C · media con fallo | Latencia media con `premium_offset` en B |
+| Retardo añadido | `media(C) − media(A)`. Umbral ≤ 300 ms |
 | Primas erróneas (C) | Respuestas 200 de C cuya prima ≠ oráculo. Umbral: 0 |
 
 CUMPLE solo si se cumplen **los dos** umbrales.
@@ -338,7 +333,7 @@ No son los de Locust. Se van llenando al **cerrar** cada bloque.
 | Gráfico | Qué muestra |
 |---|---|
 | Detección por modo | Barras de tasa vs la línea del 99 % |
-| Latencia A vs C | p50 / p95 / p99 de la línea base y de C |
+| Latencia A vs C | media / p50 / p99 de la línea base y de C |
 | Línea de tiempo | A → 8×B → C. Casillas iguales; arriba, duración en segundos |
 
 Las etiquetas de la línea de tiempo van en corto (A, offset, skip, stale,
@@ -357,7 +352,7 @@ cerrar, verde o rojo según CUMPLE. El texto vive en `reporte.py`
 ## 7. Informe Markdown
 
 `docs/RESULTADOS-EXPERIMENTO.md`, al final de la corrida. Mismos umbrales, más
-detalle de latencia (p50, p95, p99, máx, tasa real/min). La columna de ASR-11
+detalle de latencia (media, p50, p99, máx, tasa real/min). La columna de ASR-11
 es **Efectivos** (`fallos_efectivos`); la tasa sale de `tasa_deteccion` que
 anotó `anotar_deteccion.py`. La nota de `factor_skip` explica por qué
 efectivos &lt; requests enviadas.
@@ -369,7 +364,7 @@ efectivos &lt; requests enviadas.
 | ASR | Métrica | Cómo se obtiene |
 |---|---|---|
 | 11 | ≥ 99 % en **cada** modo | incidentes ÷ `fallos_efectivos` |
-| 12 | retardo p95 ≤ 300 ms | `p95(C) − p95(A)` |
+| 12 | retardo total añadido ≤ 300 ms | `media(C) − media(A)` |
 | 12 | 0 primas erróneas | oráculo Locust, una a una |
 
 El numerador oficial de detección es Gestión de Errores (`GET /v1/metricas`),

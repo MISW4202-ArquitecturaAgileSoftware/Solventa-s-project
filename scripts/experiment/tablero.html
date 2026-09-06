@@ -160,8 +160,8 @@
       <section>
         <h2>ASR-12 · enmascaramiento <span id="asr12-badge"></span></h2>
         <div class="kpis">
-          <div class="kpi"><span>A · p95 base</span><strong id="p95-a">—</strong></div>
-          <div class="kpi"><span>C · p95 con fallo</span><strong id="p95-c">—</strong></div>
+          <div class="kpi"><span>A · media base</span><strong id="media-a">—</strong></div>
+          <div class="kpi"><span>C · media con fallo</span><strong id="media-c">—</strong></div>
           <div class="kpi"><span>Retardo añadido</span><strong id="retardo">—</strong></div>
           <div class="kpi"><span>Primas erróneas (C)</span><strong id="erroneas">—</strong></div>
         </div>
@@ -181,8 +181,8 @@
       </section>
       <section>
         <h2>Latencia A vs C</h2>
-        <p class="hint">Percentiles del journey. ASR-12 mira p95(C) − p95(A) ≤ 300 ms.</p>
-        <svg id="chart-latencia" class="chart" role="img" aria-label="Percentiles de latencia A frente a C"></svg>
+        <p class="hint">Latencia del journey. ASR-12 mira media(C) − media(A) ≤ 300 ms.</p>
+        <svg id="chart-latencia" class="chart" role="img" aria-label="Latencia A frente a C"></svg>
         <p class="leyenda"><span><i style="background:var(--bar-a)"></i>A línea base</span><span><i style="background:var(--bar-c)"></i>C con fallo</span></p>
       </section>
     </div>
@@ -305,7 +305,7 @@
       const {W, H} = marco(el, 200);
       const L = 40, R = 16, T = 16, Btm = 28;
       const innerW = W - L - R, innerH = H - T - Btm;
-      const keys = ["p50", "p95", "p99"];
+      const keys = ["media", "p50", "p99"];
       const vals = keys.flatMap((k) => [Number(A[k] || 0), Number(C[k] || 0)]);
       const max = Math.max(10, ...vals) * 1.15;
       const grupos = keys.length;
@@ -330,7 +330,7 @@
         }
       });
       if (A.estado !== "hecho" && C.estado !== "hecho") {
-        el.appendChild(svg("text", {x:W/2, y:H/2, fill:"#8aa0b5", "font-size":"13", "text-anchor":"middle"}, "Aún no hay percentiles"));
+        el.appendChild(svg("text", {x:W/2, y:H/2, fill:"#8aa0b5", "font-size":"13", "text-anchor":"middle"}, "Aún no hay latencias"));
       }
     }
 
@@ -416,8 +416,8 @@
       }
 
       const A = d.A || {}, C = d.C || {}, a12 = d.asr12 || {};
-      document.getElementById("p95-a").textContent = A.estado === "hecho" ? `${A.p95} ms` : (A.estado === "en_curso" ? "midiendo…" : "—");
-      document.getElementById("p95-c").textContent = C.estado === "hecho" ? `${C.p95} ms` : (C.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("media-a").textContent = A.estado === "hecho" ? `${A.media} ms` : (A.estado === "en_curso" ? "midiendo…" : "—");
+      document.getElementById("media-c").textContent = C.estado === "hecho" ? `${C.media} ms` : (C.estado === "en_curso" ? "midiendo…" : "—");
       document.getElementById("asr12-badge").innerHTML = badge(a12.estado || "pendiente");
       if (a12.estado === "hecho") {
         document.getElementById("retardo").textContent = `${a12.retardo_ms >= 0 ? "+" : ""}${a12.retardo_ms} ms`;

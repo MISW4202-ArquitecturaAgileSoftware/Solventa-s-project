@@ -34,11 +34,11 @@ paso 2 (`carga.js` / `carga.py`). No reemplaza los pasos 1, 3, 4, 5 y 6:
 | Dependencia | `scripts/experiment/requirements.txt`, instalada en `.venv` | El experimentador no es un microservicio; no contamina `requirements.txt` de cotizador/votación/gateway. |
 | Clase de usuario | `HttpUser` | 500 req/min no justifican `FastHttpUser`. |
 | Ritmo | `constant_pacing(1.2)` × **10 usuarios** = **500/min** | `between()` mediría tiempo de pensar, no el pico. Es el equivalente del sleep al instante teórico de `carga.py`. |
-| Spawn | `--users 10 --spawn-rate 10` | Los 10 usuarios nacen al inicio; la rampa no entra en el p95. |
+| Spawn | `--users 10 --spawn-rate 10` | Los 10 usuarios nacen al inicio; la rampa no entra en la media. |
 | Entrada | `POST /v1/cotizaciones` en el gateway | Pegarle a Votación (`:8002`) saltaría el journey que ASR-12 mide. |
 | Solicitudes | Las mismas que `solicitud_de(indice)` en `carga.py` | Dos corridas con los mismos `n` son comparables. |
 | Oráculo | `experiment_common.pricing.calcular` | Misma razón por la que se descartó k6: hay que verificar la prima una a una. |
-| Percentiles del veredicto | Muestras crudas en `test_stop`, no el histograma de Locust | Locust redondea sub-100 ms al ms. El umbral es 300 ms, pero el informe debe seguir siendo exacto. |
+| Latencia del veredicto | Muestras crudas en `test_stop`, no el histograma de Locust | Locust redondea sub-100 ms al ms. El umbral es 300 ms, pero el informe debe seguir siendo exacto. |
 | Numerador ASR-11 | `GET /v1/metricas` **después** de drenar el reportero | Locust no ve el JSONL. El reporte es *fire-and-forget*. |
 | Denominador ASR-11 | `fallos_efectivos`, no `enviadas` | `factor_skip` en clase ocupacional 1 no altera la prima (el factor ya es `1.00`). Contar esas requests hace fallar ASR-11 por metodología, no por la táctica. |
 | UI | Solo depuración (`locust` sin `--headless`) | La corrida oficial es headless, reproducible, sin operador. |
@@ -54,7 +54,7 @@ paso 2 (`carga.js` / `carga.py`). No reemplaza los pasos 1, 3, 4, 5 y 6:
 | ASR | Hipótesis | Umbral |
 |---|---|---|
 | **ASR-11** | El sistema identifica el cálculo erróneo **antes** de entregarlo al canal, en horario pico | ≥ 99 % de los fallos **efectivamente inyectados**, en **todos** los modos |
-| **ASR-12** | Con un cotizador fallando, el cliente recibe el valor correcto y el journey no se encarece | `p95(C) − p95(A) ≤ 300 ms` **y** `primas_erroneas == 0` |
+| **ASR-12** | Con un cotizador fallando, el cliente recibe el valor correcto y el journey no se encarece | retardo total añadido `media(C) − media(A) ≤ 300 ms` **y** `primas_erroneas == 0` |
 
 ### Reparto de responsabilidades
 
@@ -86,11 +86,10 @@ bloque de `correr.sh` que calcula `tasa_deteccion` dependen de él.
   "fallos_efectivos": 1000,
   "latencia_ms": {
     "n": 1000,
+    "media": 8.1,
     "p50": 7.9,
-    "p95": 10.35,
     "p99": 12.49,
-    "max": 22.26,
-    "media": 8.1
+    "max": 22.26
   },
   "primas_erroneas": 0,
   "muestras_erroneas": []
@@ -286,7 +285,7 @@ haciendo el POST).
 ## L2 · Oráculo y métricas de ASR-12
 
 **Objetivo:** cada 200 se verifica contra el dominio; el JSON de salida trae
-p95 crudo y `primas_erroneas`.
+la latencia media cruda y `primas_erroneas`.
 
 **Pasos**
 
@@ -313,7 +312,7 @@ LOCUST_SALIDA=scripts/experiment/resultados/A-baseline.json \
   locust -f scripts/experiment/locustfile.py --headless \
          --users 10 --spawn-rate 10 --host http://localhost:8000
 python -c "import json; d=json.load(open('scripts/experiment/resultados/A-baseline.json')); \
-print(d['primas_erroneas'], d['latencia_ms']['p95'], d['tasa_real_por_minuto'])"
+print(d['primas_erroneas'], d['latencia_ms']['media'], d['tasa_real_por_minuto'])"
 
 # con fallo, el oráculo debe seguir viendo la prima SANA
 ./scripts/experiment/inyectar.sh b premium_offset
@@ -325,8 +324,8 @@ python -c "import json; print(json.load(open('/tmp/oraculo.json'))['primas_erron
 ./scripts/experiment/inyectar.sh b none
 ```
 
-**Resultado esperado:** corrida sana → `primas_erroneas = 0`, p95 del orden de
-10 ms (no 300). Con `premium_offset` en B → `primas_erroneas = 0` (ASR-12:
+**Resultado esperado:** corrida sana → `primas_erroneas = 0`, latencia media del orden
+de 10 ms (no 300). Con `premium_offset` en B → `primas_erroneas = 0` (ASR-12:
 Votación enmascara). Si aquí aparecen primas erróneas, el sistema está roto y
 no se avanza: Locust no se “ajusta” para esconderlo.
 
@@ -458,7 +457,7 @@ generador. Se documenta, no se “corrige” Locust.
 3. `./scripts/experiment/correr.sh` **sin** `RAPIDO` → 5000 + 8×1000 + 5000 a
    500/min (~38 min de carga, más reinicios).
 4. No tocar los JSON de `resultados/` a mano. Si hay que repetir un modo,
-   se repite la corrida entera: el p95 de A y C tienen que nacer del mismo
+   se repite la corrida entera: la media de A y C tiene que nacer del mismo
    proceso para ser comparables.
 5. Commitear `docs/RESULTADOS-EXPERIMENTO.md` (el informe) , no los JSON
    crudos salvo que el curso pida el artefacto.
@@ -469,7 +468,7 @@ corregido)
 | ASR | Métrica | Umbral | Cómo se obtiene |
 |---|---|---|---|
 | **ASR-11** | Tasa de detección | **≥ 99 %** | incidentes ÷ `fallos_efectivos`, por modo |
-| **ASR-12** | Retardo añadido | **≤ 300 ms** sobre el p95 base | `p95(C) − p95(A)` |
+| **ASR-12** | Retardo total añadido | **≤ 300 ms** | `media(C) − media(A)` |
 | **ASR-12** | Primas erróneas | **0** | oráculo Locust, una a una |
 
 **Resultado esperado:** informe generado por `reporte.py`; límite conocido

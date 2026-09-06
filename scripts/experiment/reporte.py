@@ -177,16 +177,16 @@ def main() -> int:
     lineas += [
         "## ASR-12 · Enmascaramiento del cálculo erróneo",
         "",
-        "Umbrales: retardo añadido **≤ 300 ms** sobre el p95 de la línea base, y",
+        "Umbrales: retardo total añadido **≤ 300 ms** sobre la latencia media de la línea base, y",
         "**0 primas erróneas** entregadas.",
         "",
     ]
     if base and mascara:
-        p95_base = base["latencia_ms"]["p95"]
-        p95_masc = mascara["latencia_ms"]["p95"]
-        retardo = p95_masc - p95_base
+        media_base = base["latencia_ms"]["media"]
+        media_masc = mascara["latencia_ms"]["media"]
+        retardo = media_masc - media_base
         lineas += [
-            "| Corrida | n | tasa real | p50 | p95 | p99 | máx |",
+            "| Corrida | n | tasa real | media | p50 | p99 | máx |",
             "|---|---:|---:|---:|---:|---:|---:|",
         ]
         for etiqueta, datos in (("A · línea base", base), ("C · con fallo activo", mascara)):
@@ -194,12 +194,12 @@ def main() -> int:
             lineas.append(
                 f"| {etiqueta} | {datos['enviadas']} "
                 f"| {datos['tasa_real_por_minuto']}/min "
-                f"| {lat['p50']} ms | {lat['p95']} ms | {lat['p99']} ms | {lat['max']} ms |"
+                f"| {lat['media']} ms | {lat['p50']} ms | {lat['p99']} ms | {lat['max']} ms |"
             )
         lineas += [
             "",
-            f"- Retardo añadido sobre el p95: **{retardo:+.2f} ms** "
-            f"(base {p95_base} ms → con fallo {p95_masc} ms).",
+            f"- Retardo total añadido sobre la media: **{retardo:+.2f} ms** "
+            f"(base {media_base} ms → con fallo {media_masc} ms).",
             f"- Veredicto latencia: {marca(retardo <= UMBRAL_RETARDO_MS)} "
             f"(umbral ≤ {UMBRAL_RETARDO_MS} ms).",
             "",

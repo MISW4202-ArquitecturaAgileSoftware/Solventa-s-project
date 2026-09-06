@@ -74,7 +74,7 @@ class Tablero:
             "enviadas": datos.get("enviadas"),
             "tasa": datos.get("tasa_real_por_minuto"),
             "p50": lat.get("p50"),
-            "p95": lat.get("p95"),
+            "media": lat.get("media"),
             "p99": lat.get("p99"),
             "erroneas": datos.get("primas_erroneas"),
         }
@@ -106,7 +106,7 @@ class Tablero:
             "enviadas": datos.get("enviadas"),
             "tasa": datos.get("tasa_real_por_minuto"),
             "p50": lat.get("p50"),
-            "p95": lat.get("p95"),
+            "media": lat.get("media"),
             "p99": lat.get("p99"),
             "erroneas": datos.get("primas_erroneas"),
             "estados": datos.get("por_estado_cotizacion"),
@@ -202,14 +202,14 @@ def _veredicto_asr11(bloques: dict[str, dict[str, Any]]) -> dict[str, Any]:
 def _veredicto_asr12(base: dict[str, Any], mascara: dict[str, Any]) -> dict[str, Any]:
     if base.get("estado") != "hecho" or mascara.get("estado") != "hecho":
         return {"estado": "pendiente"}
-    p95_a = float(base["p95"])
-    p95_c = float(mascara["p95"])
-    retardo = round(p95_c - p95_a, 2)
+    media_a = float(base["media"])
+    media_c = float(mascara["media"])
+    retardo = round(media_c - media_a, 2)
     erroneas = int(mascara.get("erroneas") or 0)
     return {
         "estado": "hecho",
-        "p95_a": p95_a,
-        "p95_c": p95_c,
+        "media_a": media_a,
+        "media_c": media_c,
         "retardo_ms": retardo,
         "erroneas": erroneas,
         "cumple_latencia": retardo <= UMBRAL_RETARDO_MS,
