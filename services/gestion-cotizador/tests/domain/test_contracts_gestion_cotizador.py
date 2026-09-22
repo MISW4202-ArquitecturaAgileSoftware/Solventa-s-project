@@ -16,6 +16,7 @@ from gestion_cotizador.contracts import (
     SolicitudCotizacion,
 )
 from gestion_cotizador.errors import ErrorValidacion
+from gestion_cotizador.pricing import calcular
 
 
 def _asegurado_valido() -> dict[str, Any]:
@@ -59,10 +60,11 @@ def _sobre_valido() -> dict[str, Any]:
 # --- SolicitudCotizacion -----------------------------------------------------
 
 
-def test_deserializa_solicitud_valida() -> None:
+def test_solicitud_valida_alimenta_el_calculo() -> None:
     solicitud = SolicitudCotizacion.desde_dict(_solicitud_valida())
 
     assert solicitud.suma_asegurada == Decimal("250000000.00")
+    assert calcular(solicitud, FECHA_CALCULO).prima_mensual == Decimal("90348.41")
 
 
 def test_importe_como_numero_json_es_rechazado() -> None:
@@ -120,6 +122,16 @@ def test_campo_ausente_se_reporta_por_nombre() -> None:
     with pytest.raises(ErrorValidacion) as excinfo:
         SolicitudCotizacion.desde_dict(dato)
     assert excinfo.value.campo == "plazo_meses"
+
+
+def test_edad_fuera_de_rango_se_rechaza_en_el_calculo() -> None:
+    """La edad depende de fecha_calculo, así que no se valida al deserializar."""
+    dato = _solicitud_valida()
+    dato["asegurado"] = dato["asegurado"] | {"fecha_nacimiento": "2015-01-01"}
+    solicitud = SolicitudCotizacion.desde_dict(dato)
+
+    with pytest.raises(ErrorValidacion):
+        calcular(solicitud, FECHA_CALCULO)
 
 
 def test_campo_ausente_dice_que_es_obligatorio() -> None:
@@ -192,6 +204,26 @@ def test_actor_incompleto_se_rechaza() -> None:
 
 
 # --- SobreRespuesta (salida) -------------------------------------------------
+
+
+def test_serializa_la_respuesta_ok_con_los_dos_bloques() -> None:
+    resultado = calcular(SolicitudCotizacion.desde_dict(_solicitud_valida()), FECHA_CALCULO)
+    sobre = SobreRespuesta(
+        correlation_id="019a05aa-24a1-753e-b019-a0810d66a3f6",
+        servicio="gestion-cotizador",
+        estado=EstadoRespuesta.OK,
+        codigo=CodigoRespuesta.OK,
+        duracion_ms=7,
+        resultado=resultado,
+    )
+    serializado = json.loads(json.dumps(sobre.a_dict()))
+
+    assert serializado["servicio"] == "gestion-cotizador"
+    assert serializado["estado"] == "OK"
+    assert serializado["codigo"] == "OK"
+    assert serializado["resultado"]["cotizacion"]["prima_mensual"] == "90348.41"
+    assert serializado["resultado"]["explicacion"]["factores"]["canal"] == "0.95"
+    assert serializado["error"] is None
 
 
 def test_serializa_la_respuesta_de_error_sin_resultado() -> None:
