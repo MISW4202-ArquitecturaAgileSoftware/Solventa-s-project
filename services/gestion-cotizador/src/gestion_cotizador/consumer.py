@@ -7,6 +7,7 @@ sobre Redis; una red interna no restringe por sí sola los comandos o claves.
 
 import json
 import logging
+import threading
 from time import perf_counter
 from typing import Any
 
@@ -119,3 +120,39 @@ def procesar(cliente: Redis, config: Config, mensaje_id: str, campos: dict[str, 
             tuberia.execute()
 
         cliente.xack(config.stream_cotizador, config.grupo, mensaje_id)
+
+
+def bucle(cliente: Redis, config: Config, parar: threading.Event) -> None:
+    """Consume solicitudes hasta que se pida detener el proceso."""
+    asegurar_grupo(cliente, config)
+    log.info("worker listo", extra={"grupo": config.grupo, "consumidor": config.consumidor})
+
+    while not parar.is_set():
+        try:
+            # redis-py no tipa con precisión el retorno de xreadgroup; anotarlo
+            # como Any es más honesto que un cast que finja una garantía inexistente.
+            lotes: Any = cliente.xreadgroup(
+                groupname=config.grupo,
+                consumername=config.consumidor,
+                streams={config.stream_cotizador: ">"},
+                count=10,
+                block=config.block_ms,
+            )
+        except ResponseError as err:
+            # NOGROUP: el stream o el grupo desaparecieron bajo los pies del
+            # worker (alguien vació Redis entre corridas del experimento).
+            if "NOGROUP" not in str(err):
+                raise
+            log.warning("consumer group desaparecido, recreando", extra={"grupo": config.grupo})
+            asegurar_grupo(cliente, config)
+            continue
+        for _stream, mensajes in lotes or []:
+            for mensaje_id, campos in mensajes:
+                try:
+                    procesar(cliente, config, mensaje_id, campos)
+                except Exception:
+                    # Un mensaje corrupto no puede tumbar el worker: se
+                    # registra, se deja pendiente y se sigue con el siguiente.
+                    log.exception("mensaje no procesable", extra={"mensaje_id": mensaje_id})
+
+    log.info("bucle detenido")
