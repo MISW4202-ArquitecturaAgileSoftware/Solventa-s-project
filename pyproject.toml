@@ -10,6 +10,7 @@ target-version = "py314"
 src = [
   "services/api-gateway/src",
   "services/cotizador/src",
+  "services/gestion-cotizador/src",
   "services/gestion-errores/src",
   "services/votacion/src",
   "scripts/experiment",
@@ -51,7 +52,7 @@ python_version = "3.14"
 strict = true
 warn_unreachable = true
 show_error_codes = true
-mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src:scripts/experiment"
+mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-cotizador/src:services/gestion-errores/src:services/votacion/src:scripts/experiment"
 exclude = [
   "^\\.venv/",
   # pytest exige que el archivo se llame conftest.py, así que cada servicio
