@@ -1,35 +1,75 @@
-"""Logging JSON pequeño para correlacionar las solicitudes del experimento."""
+"""Logging estructurado en JSON con `correlation_id` obligatorio.
+
+El experimento se audita leyendo logs: si una línea no lleva `correlation_id`,
+no se puede atribuir a un journey y es ruido. El identificador se propaga por
+`ContextVar`, de modo que las funciones de dominio no tienen que recibirlo como
+parámetro ni conocer el logger.
+"""
 
 import json
 import logging
-from datetime import UTC, datetime
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
+_correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
 
-class _JsonFormatter(logging.Formatter):
+# Atributos que LogRecord trae de serie; todo lo demás que traiga el record es
+# contexto que el llamante añadió con `extra=` y va al JSON.
+_ATRIBUTOS_ESTANDAR = frozenset(logging.LogRecord("", 0, "", 0, "", None, None).__dict__)
+
+
+def fijar_correlation_id(valor: str | None) -> None:
+    _correlation_id.set(valor)
+
+
+def correlation_id_actual() -> str | None:
+    return _correlation_id.get()
+
+
+@contextmanager
+def contexto_correlacion(valor: str) -> Iterator[None]:
+    """Asocia todas las líneas emitidas dentro del bloque a un journey."""
+    testigo = _correlation_id.set(valor)
+    try:
+        yield
+    finally:
+        _correlation_id.reset(testigo)
+
+
+class FormateadorJson(logging.Formatter):
+    def __init__(self, servicio: str) -> None:
+        super().__init__()
+        self.servicio = servicio
+
     def format(self, record: logging.LogRecord) -> str:
-        datos = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "level": record.levelname,
-            "event": record.getMessage(),
+        linea: dict[str, Any] = {
+            "momento": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%03dZ"),
+            "nivel": record.levelname,
+            "servicio": self.servicio,
+            "logger": record.name,
+            "mensaje": record.getMessage(),
+            "correlation_id": correlation_id_actual(),
         }
-        datos.update(getattr(record, "event_fields", {}))
-        return json.dumps(datos, ensure_ascii=False)
+        for clave, valor in record.__dict__.items():
+            if clave not in _ATRIBUTOS_ESTANDAR and not clave.startswith("_"):
+                linea[clave] = valor
+        if record.exc_info is not None:
+            linea["excepcion"] = self.formatException(record.exc_info)
+        return json.dumps(linea, ensure_ascii=False, default=str)
 
 
-def configurar_logging(nivel: str) -> None:
-    manejador = logging.StreamHandler()
-    manejador.setFormatter(_JsonFormatter())
-    logger = logging.getLogger("api_gateway")
-    logger.handlers.clear()
-    logger.addHandler(manejador)
-    logger.setLevel(nivel.upper())
-    logger.propagate = False
+def configurar(servicio: str, nivel: str = "INFO") -> None:
+    """Deja un único handler a stdout con formato JSON.
 
-
-def registrar_log(nivel: int, evento: str, **campos: Any) -> None:
-    logging.getLogger("api_gateway").log(
-        nivel,
-        evento,
-        extra={"event_fields": campos},
-    )
+    A stdout y no a un archivo: en un contenedor los logs son un flujo, y de
+    recogerlos se encarga el runtime.
+    """
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(FormateadorJson(servicio))
+    raiz = logging.getLogger()
+    raiz.handlers.clear()
+    raiz.addHandler(handler)
+    raiz.setLevel(nivel.upper())

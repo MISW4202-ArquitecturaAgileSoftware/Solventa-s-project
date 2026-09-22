@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# API Gateway autocontenido. El contexto de build es esta misma carpeta.
+# api-gateway autocontenido. El contexto de build es esta misma carpeta.
 
 FROM python:3.14.6-slim AS builder
 
@@ -29,7 +29,9 @@ COPY --link src /app/src
 WORKDIR /app
 USER 10001
 
-# Un proceso con varios hilos basta para el tamaño controlado del experimento.
+# Sin estado propio: no hay volumen que crear. Más hilos que los demás
+# servicios porque cada petición retiene uno mientras espera a Autenticación
+# y a Validación.
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "32", \
      "--worker-class", "gthread", "--timeout", "30", "--access-logfile", "-", \
-     "api_gateway.app:app"]
+     "api_gateway.app:crear_app()"]
