@@ -9,9 +9,10 @@ services:
       - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redisdata:/data
     networks:
-      # Único servicio presente en las dos zonas de la cola: es el puente.
-      - data-votacion
-      - data-cotizadores
+      # Único servicio presente en las dos zonas de la cola: es el puente
+      # entre el plano de control y el plano de negocio.
+      - data-control
+      - data-negocio
     healthcheck:
       # "Arrancado" no es "listo": hasta que no responde PONG, quien dependa de
       # él no debe arrancar.
@@ -22,11 +23,11 @@ services:
       start_period: 5s
 
 networks:
-  data-votacion:
-    name: ${STACK:?falta STACK en .env}_data_votacion
+  data-control:
+    name: ${STACK:?falta STACK en .env}_data_control
     internal: true
-  data-cotizadores:
-    name: ${STACK:?falta STACK en .env}_data_cotizadores
+  data-negocio:
+    name: ${STACK:?falta STACK en .env}_data_negocio
     internal: true
 
 volumes:

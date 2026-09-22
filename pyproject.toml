@@ -5,13 +5,15 @@
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-# Sin esto, ruff trata `cotizador` y `gestion_errores` como dependencias de
+# Sin esto, ruff trata los paquetes de los servicios como dependencias de
 # terceros y reordena mal los imports.
 src = [
   "services/api-gateway/src",
-  "services/cotizador/src",
-  "services/gestion-errores/src",
-  "services/votacion/src",
+  "services/auditor/src",
+  "services/autenticacion/src",
+  "services/gestion-cotizador/src",
+  "services/gestion-polizas/src",
+  "services/validacion/src",
   "scripts/experiment",
 ]
 extend-exclude = [".venv"]
@@ -38,7 +40,7 @@ ignore = [
   "B008",
   # N818 exige el sufijo "Error" en las excepciones, convención del inglés. El
   # dominio de este proyecto está nombrado en español y usa el prefijo:
-  # ErrorValidacion, ErrorSinConsenso. Cambiarlo rompería la coherencia del
+  # ErrorValidacion, ErrorSesionRevocada. Cambiarlo rompería la coherencia del
   # dominio para satisfacer una regla de otro idioma.
   "N818",
 ]
@@ -51,7 +53,7 @@ python_version = "3.14"
 strict = true
 warn_unreachable = true
 show_error_codes = true
-mypy_path = "services/api-gateway/src:services/cotizador/src:services/gestion-errores/src:services/votacion/src:scripts/experiment"
+mypy_path = "services/api-gateway/src:services/auditor/src:services/autenticacion/src:services/gestion-cotizador/src:services/gestion-polizas/src:services/validacion/src:scripts/experiment"
 exclude = [
   "^\\.venv/",
   # pytest exige que el archivo se llame conftest.py, así que cada servicio
@@ -63,7 +65,7 @@ exclude = [
 ]
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "locust.*", "gevent.*"]
+module = ["redis.*", "locust.*", "gevent.*", "jwt.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
