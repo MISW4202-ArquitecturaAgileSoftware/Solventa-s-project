@@ -5,6 +5,7 @@ name: ${STACK:?falta STACK}
 
 include:
   - queue-service/docker-compose.security.yaml
+  - services/gestion-cotizador/docker-compose.yaml
 
 networks:
   data-control:

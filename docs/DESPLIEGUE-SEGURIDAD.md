@@ -1,7 +1,7 @@
 # Despliegues de seguridad y disponibilidad
 
 El Compose principal corresponde al experimento de seguridad. Solo incluye
-componentes implementados: inicialmente Redis, sin puertos públicos.
+componentes implementados: Redis y Gestión Cotizador, sin puertos públicos.
 
 ```bash
 docker compose --env-file example.security.env config --quiet
@@ -33,3 +33,9 @@ COMPOSE_FILE=docker-compose.disponibilidad.yaml ./scripts/experiment/correr.sh -
 ```
 
 Los contenedores existentes y sus volúmenes no se eliminan durante esta migración.
+
+## Gestión Cotizador
+
+El servicio está documentado en [su README](../services/gestion-cotizador/README.md).
+Incluye una prueba automática con Redis real, sin depender de los servicios de
+autenticación, validación o de una interacción humana.

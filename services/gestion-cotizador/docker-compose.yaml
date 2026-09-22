@@ -1,0 +1,34 @@
+# Gestión-Cotizador: worker que consume `sol:cotizador`, calcula la prima con
+# el dominio determinista (`pricing.py`, `tarifario.py`) y responde en
+# `resp:{correlation_id}`. No publica auditoría ni conoce roles ni alcances.
+
+services:
+  gestion-cotizador:
+    image: solventa/gestion-cotizador:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue aislado en
+      # data-negocio.
+      network: host
+    restart: unless-stopped
+    networks:
+      # Única red: la cola es el único vecino de este worker.
+      - data-negocio
+    depends_on:
+      redis:
+        # "Arrancado" no es "listo": sin esto el worker intentaría crear su
+        # consumer group contra un Redis que todavía no acepta conexiones.
+        condition: service_healthy
+    environment:
+      REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
+      STREAM_COTIZADOR: ${STREAM_COTIZADOR:-sol:cotizador}
+      PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:-resp}
+      TTL_RESPUESTAS_S: ${TTL_RESPUESTAS_S:-60}
+      TARIFARIO_VERSION: ${TARIFARIO_VERSION:-2026.02}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+networks:
+  data-negocio:
+    name: ${STACK:?falta STACK en .env}_data_negocio
+    internal: true
