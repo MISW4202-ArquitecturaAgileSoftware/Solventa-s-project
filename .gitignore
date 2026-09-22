@@ -11,6 +11,3 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
-
-# Resultados del experimento (se regeneran)
-scripts/experiment/resultados/
