@@ -1,0 +1,35 @@
+# Redis del despliegue de seguridad. Sin puertos publicados.
+# Las redes limitan conectividad; los permisos por cola requieren ACL.
+
+services:
+  redis:
+    image: redis:${REDIS_TAG:?falta REDIS_TAG en .env}
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redisdata:/data
+    networks:
+      # Acceso desde el plano de control y los workers de negocio.
+      - data-control
+      - data-negocio
+    healthcheck:
+      # "Arrancado" no es "listo": hasta que no responde PONG, quien dependa de
+      # él no debe arrancar.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  data-control:
+    name: ${STACK:?falta STACK en .env}_data_control
+    internal: true
+  data-negocio:
+    name: ${STACK:?falta STACK en .env}_data_negocio
+    internal: true
+
+volumes:
+  redisdata:
+    name: ${STACK:?falta STACK en .env}_redisdata

@@ -1,0 +1,56 @@
+# Solventa — orquestación del sistema completo.
+#
+# Este archivo NO define servicios: cada uno aporta su propio
+# docker-compose.yaml y aquí solo se agrupan, junto con las redes compartidas.
+#
+# Las inclusiones se habilitan a medida que cada fase de PLAN-IMPLEMENTACION.md
+# se completa y valida. No adelantar líneas: un include a un archivo inexistente
+# rompe `docker compose config` y deja de servir como validación de la fase.
+#
+include:
+  - queue-service/docker-compose.yaml                # F2
+  - services/cotizador/docker-compose.yaml           # F3
+  - services/gestion-errores/docker-compose.yaml     # F4
+  - services/votacion/docker-compose.yaml             # F5
+  - services/api-gateway/docker-compose.yaml          # F6
+
+
+# Nombre del proyecto: prefija contenedores, redes y volúmenes.
+name: ${STACK:?falta STACK en .env}
+
+networks:
+  # Única zona con salida al exterior. Solo el api-gateway se conecta aquí.
+  edge:
+    name: ${STACK:?falta STACK en .env}_edge
+
+  # Tráfico HTTP entre servicios propios. Sin acceso desde fuera.
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+
+  # Acceso desde el HOST, solo para operar y medir el experimento: leer
+  # /v1/metricas y /v1/incidentes. No la usa ningún servicio para hablar con
+  # otro. Existe porque un servicio conectado únicamente a redes
+  # `internal: true` no puede publicar puertos. Los cotizadores nunca se
+  # conectan aquí: siguen aislados en `data`.
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops
+
+  # La cola se divide en DOS zonas, no una. Con una sola red compartida los
+  # cotizadores podrían alcanzar a Votación por HTTP, y nada impediría que
+  # alguien añadiera después una llamada directa que saltara la cola. Con Redis
+  # en ambas y nadie más, el ÚNICO camino entre Votación y las réplicas es la
+  # cola, y eso queda garantizado por la red, no por disciplina.
+  data-votacion:
+    name: ${STACK:?falta STACK en .env}_data_votacion
+    internal: true
+
+  data-cotizadores:
+    name: ${STACK:?falta STACK en .env}_data_cotizadores
+    internal: true
+
+volumes:
+  redisdata:
+    name: ${STACK:?falta STACK en .env}_redisdata
+  incidentes:
+    name: ${STACK:?falta STACK en .env}_incidentes
