@@ -1,0 +1,42 @@
+# Gestión de Pólizas: worker puro que consume sol:polizas, resuelve
+# consultar_poliza / aprobar_poliza contra su propio SQLite y publica auditoría.
+
+services:
+  gestion-polizas:
+    image: solventa/gestion-polizas:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue aislado en data-negocio.
+      network: host
+    restart: unless-stopped
+    networks:
+      # Solo alcanza la cola. Validación autoriza las operaciones; los
+      # permisos de Redis deben restringir quién publica en cada stream.
+      - data-negocio
+    volumes:
+      - polizas-data:/data
+    environment:
+      REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
+      STREAM_POLIZAS: ${STREAM_POLIZAS:-sol:polizas}
+      PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:-resp}
+      STREAM_AUDITORIA: ${STREAM_AUDITORIA:-auditoria}
+      STREAM_MAXLEN: ${STREAM_MAXLEN:-10000}
+      TTL_RESPUESTAS_S: ${TTL_RESPUESTAS_S:-60}
+      RUTA_DB: /data/polizas.db
+      GRUPO: ${GRUPO:-gestion-polizas}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      redis:
+        # "Arrancado" no es "listo": sin esto el worker intentaría crear su
+        # consumer group contra un Redis que todavía no acepta conexiones.
+        condition: service_healthy
+
+networks:
+  data-negocio:
+    name: ${STACK:?falta STACK en .env}_data_negocio
+    internal: true
+
+volumes:
+  polizas-data:
+    name: ${STACK:?falta STACK en .env}_polizas_data
