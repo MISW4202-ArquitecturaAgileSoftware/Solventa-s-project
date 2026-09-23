@@ -1,4 +1,5 @@
-# API Gateway: única puerta de entrada. Es el ÚNICO servicio en la red `edge`.
+# api-gateway: única puerta pública. Enruta hacia autenticacion y validacion;
+# no tiene lógica de negocio ni de seguridad propia.
 
 services:
   api-gateway:
@@ -10,16 +11,30 @@ services:
       network: host
     restart: unless-stopped
     networks:
-      # edge: la única zona con salida al exterior. Nadie más se conecta aquí.
+      # edge: única zona con salida al exterior. api-gateway es el ÚNICO
+      # servicio presente aquí.
       - edge
-      # backend: para alcanzar al servicio de cotización configurado.
+      # backend: llama a autenticacion y a validacion.
       - backend
     ports:
       - "${PUERTO_GATEWAY:?falta PUERTO_GATEWAY en .env}:8000"
     environment:
-      QUOTATION_SERVICE_URL: ${QUOTATION_SERVICE_URL:?falta QUOTATION_SERVICE_URL en .env}
-      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:?falta UPSTREAM_TIMEOUT_MS en .env}
+      URL_AUTENTICACION: ${URL_AUTENTICACION:?falta URL_AUTENTICACION en .env}
+      URL_VALIDACION: ${URL_VALIDACION:?falta URL_VALIDACION en .env}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-3000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      autenticacion:
+        condition: service_started
+      validacion:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
 networks:
   edge:

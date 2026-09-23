@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# api-gateway autocontenido. El contexto de build es esta misma carpeta.
+# Validación autocontenida. El contexto de build es esta misma carpeta.
 
 FROM python:3.14.6-slim AS builder
 
@@ -21,7 +21,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin solventa
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin solventa \
+    && mkdir /data && chown 10001:10001 /data
 
 COPY --from=builder --link /opt/venv /opt/venv
 COPY --link src /app/src
@@ -29,9 +30,10 @@ COPY --link src /app/src
 WORKDIR /app
 USER 10001
 
-# Sin estado propio: no hay volumen que crear. Más hilos que los demás
-# servicios porque cada petición retiene uno mientras espera a Autenticación
-# y a Validación.
+# Un worker: la semilla y el SQLite son de un solo proceso. Muchos hilos
+# porque cada petición puede bloquear en BLPOP esperando al worker de negocio;
+# con pocos hilos, una operación lenta le quitaría el turno a otra petición
+# que ni siquiera necesita la cola (p. ej. /v1/anomalias).
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "32", \
      "--worker-class", "gthread", "--timeout", "30", "--access-logfile", "-", \
-     "api_gateway.app:crear_app()"]
+     "validacion.app:crear_app()"]

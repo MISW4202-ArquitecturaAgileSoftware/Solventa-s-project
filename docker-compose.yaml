@@ -1,16 +1,51 @@
-# Despliegue de seguridad. Los servicios se incluyen cuando están implementados.
-# Ejecutar con --env-file example.security.env; el experimento anterior se
-# conserva en docker-compose.disponibilidad.yaml.
-name: ${STACK:?falta STACK}
-
+# Solventa — orquestación del sistema completo.
+#
+# Este archivo NO define servicios: cada uno aporta su propio
+# docker-compose.yaml y aquí solo se agrupan, junto con las redes compartidas.
+#
+# Las inclusiones se habilitan a medida que cada fase de PLAN-IMPLEMENTACION.md
+# se completa y valida. No adelantar líneas: un include a un archivo inexistente
+# rompe `docker compose config` y deja de servir como validación de la fase.
+#
 include:
-  - queue-service/docker-compose.security.yaml
-  - services/gestion-cotizador/docker-compose.yaml
+  - queue-service/docker-compose.yaml                # F1
+  - services/autenticacion/docker-compose.yaml       # F2
+  - services/gestion-polizas/docker-compose.yaml     # F3
+  - services/gestion-cotizador/docker-compose.yaml   # F4
+  - services/validacion/docker-compose.yaml          # F5 + F6 (Reacción)
+  - services/auditor/docker-compose.yaml            # F7
+  - services/api-gateway/docker-compose.yaml         # F8
+
+# Nombre del proyecto: prefija contenedores, redes y volúmenes.
+name: ${STACK:?falta STACK en .env}
 
 networks:
+  # Única zona con salida al exterior. Solo el api-gateway se conecta aquí.
+  edge:
+    name: ${STACK:?falta STACK en .env}_edge
+
+  # HTTP entre servicios del plano de control: gateway, autenticacion,
+  # validacion (que incluye Reacción) y auditor. Sin acceso desde fuera.
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+
+  # La cola se divide en DOS zonas. Redis es el único servicio presente en
+  # ambas, así que el ÚNICO camino entre el plano de control y los workers de
+  # negocio es la cola. Eso es lo que hace verdadera la afirmación "solo
+  # Validación escribe en sol:*", de la que dependen los workers para no tener
+  # que autorizar nada: lo garantiza la red, no la disciplina.
   data-control:
-    name: ${STACK}_data_control
+    name: ${STACK:?falta STACK en .env}_data_control
     internal: true
+
   data-negocio:
-    name: ${STACK}_data_negocio
+    name: ${STACK:?falta STACK en .env}_data_negocio
     internal: true
+
+  # Acceso desde el HOST para validar fases y operar el experimento: alterar
+  # un rol (simula al atacante) y leer un OTP (simula el canal legítimo).
+  # Existe porque un servicio conectado únicamente a redes `internal: true` no
+  # puede publicar puertos. Los workers nunca se conectan aquí.
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops

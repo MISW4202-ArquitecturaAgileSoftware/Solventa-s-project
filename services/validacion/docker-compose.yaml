@@ -1,0 +1,72 @@
+# Validación: autoriza, retiene con OTP, encola hacia los workers de negocio,
+# decide sobre las anomalías que informa el Auditor y, dentro de este mismo
+# contenedor, ejecuta Reacción: consume `seguridad`, revoca y bloquea vía
+# Autenticación y guarda las alertas sin duplicados. Corazón de ASR-23 y
+# punto de contención de ASR-31.
+
+services:
+  validacion:
+    image: solventa/validacion:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en
+      # backend/data-control/ops.
+      network: host
+    restart: unless-stopped
+    networks:
+      # backend: recibe del gateway y del auditor; Reacción llama a Autenticación.
+      - backend
+      # data-control: único camino hacia los workers de negocio (la cola) y
+      # el stream `seguridad` que Reacción consume.
+      - data-control
+      # ops: solo para validar fases y para que el experimento lea el OTP y
+      # las alertas.
+      - ops
+    ports:
+      - "${PUERTO_VALIDACION:?falta PUERTO_VALIDACION en .env}:8000"
+    volumes:
+      - validacion-data:/data
+    environment:
+      RUTA_DB: /data/validacion.db
+      REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
+      STREAM_POLIZAS: ${STREAM_POLIZAS:-sol:polizas}
+      STREAM_COTIZADOR: ${STREAM_COTIZADOR:-sol:cotizador}
+      PREFIJO_RESPUESTAS: ${PREFIJO_RESPUESTAS:-resp}
+      STREAM_SEGURIDAD: ${STREAM_SEGURIDAD:-seguridad}
+      STREAM_MAXLEN: ${STREAM_MAXLEN:-10000}
+      TIMEOUT_RESPUESTA_MS: ${TIMEOUT_RESPUESTA_MS:-2000}
+      MODO_EXPERIMENTO: ${MODO_EXPERIMENTO:-false}
+      URL_AUTENTICACION: ${URL_AUTENTICACION:?falta URL_AUTENTICACION en .env}
+      TIMEOUT_HTTP_MS: ${TIMEOUT_HTTP_MS:-2000}
+      GRUPO_REACCION: reaccion
+      BLOCK_MS: ${BLOCK_MS:-1000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      redis:
+        condition: service_healthy
+      autenticacion:
+        # Solo "arrancado": Reacción tolera que Autenticación esté caída al
+        # inicio y reintenta en la siguiente vuelta.
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+  data-control:
+    name: ${STACK:?falta STACK en .env}_data_control
+    internal: true
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops
+
+volumes:
+  validacion-data:
+    name: ${STACK:?falta STACK en .env}_validacion_data
