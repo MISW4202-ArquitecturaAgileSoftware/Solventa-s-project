@@ -1,0 +1,2 @@
+# Dependencias de ejecución. Versiones fijadas a mano: sin uv no hay lockfile.
+redis==8.1.0
