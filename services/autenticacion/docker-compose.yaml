@@ -1,0 +1,49 @@
+# Autenticación: login, verificación de sesiones, revocación y bloqueo. Único
+# servicio que conoce JWT_SECRET: para el resto el token es opaco. No usa la
+# cola: no se conecta a data-control ni a data-negocio.
+
+services:
+  autenticacion:
+    image: solventa/autenticacion:${TAG:?falta TAG en .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en
+      # backend/ops.
+      network: host
+    restart: unless-stopped
+    networks:
+      # backend: el gateway inicia y verifica sesiones; Reacción (dentro de
+      # validacion) revoca y bloquea.
+      - backend
+      # ops: solo para validar la fase y para que el experimento altere el rol
+      # del atacante.
+      - ops
+    ports:
+      - "${PUERTO_AUTENTICACION:?falta PUERTO_AUTENTICACION en .env}:8000"
+    volumes:
+      - autenticacion-data:/data
+    environment:
+      RUTA_DB: /data/autenticacion.db
+      JWT_SECRET: ${JWT_SECRET:?falta JWT_SECRET en .env}
+      JWT_TTL_S: ${JWT_TTL_S:-3600}
+      MODO_EXPERIMENTO: ${MODO_EXPERIMENTO:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  backend:
+    name: ${STACK:?falta STACK en .env}_backend
+    internal: true
+  ops:
+    name: ${STACK:?falta STACK en .env}_ops
+
+volumes:
+  autenticacion-data:
+    name: ${STACK:?falta STACK en .env}_autenticacion_data
