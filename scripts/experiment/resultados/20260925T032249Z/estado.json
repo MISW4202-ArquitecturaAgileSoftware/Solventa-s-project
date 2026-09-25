@@ -1,0 +1,65 @@
+{
+  "fase": "terminado",
+  "fecha_inicio": "2026-09-25T03:22:49Z",
+  "periodos": [
+    2,
+    5,
+    10
+  ],
+  "repeticiones": 5,
+  "periodo_actual": 10,
+  "repeticion_actual": 5,
+  "paso_actual": null,
+  "jsonl": "p10-r5-locust.jsonl",
+  "informe": "docs/RESULTADOS-EXPERIMENTO.md",
+  "pasos": [
+    {
+      "id": "reinicio",
+      "titulo": "Reinicio del stack",
+      "estado": "ok",
+      "detalle": "stack listo"
+    },
+    {
+      "id": "atacante_asr23",
+      "titulo": "Atacante ASR-23",
+      "estado": "ok",
+      "detalle": "aprobacion_1=202 otp=403/otp-fallido aprobacion_2=401/sesion-revocada latencia=143ms"
+    },
+    {
+      "id": "legitimo_asr23",
+      "titulo": "Legítimo ASR-23",
+      "estado": "ok",
+      "detalle": "resultado_operacion=APROBADA"
+    },
+    {
+      "id": "atacante_asr31",
+      "titulo": "Atacante lento ASR-31",
+      "estado": "ok",
+      "detalle": "consulta_1=200 consulta_2=401/sesion-revocada"
+    },
+    {
+      "id": "legitimo_inusual",
+      "titulo": "Consulta inusual ASR-31",
+      "estado": "ok",
+      "detalle": "consulta_1=200 consulta_2=200"
+    },
+    {
+      "id": "locust",
+      "titulo": "Ráfaga Locust",
+      "estado": "ok",
+      "detalle": "369 respuestas registradas"
+    },
+    {
+      "id": "alertas",
+      "titulo": "Alertas de Reacción",
+      "estado": "ok",
+      "detalle": "8 alertas, 359 duplicadas en logs"
+    },
+    {
+      "id": "supervisor",
+      "titulo": "Cierre del supervisor",
+      "estado": "ok",
+      "detalle": "{'POL-NOR-001': 'PENDIENTE', 'POL-NOR-002': 'APROBADA'}"
+    }
+  ]
+}

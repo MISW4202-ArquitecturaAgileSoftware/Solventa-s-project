@@ -113,6 +113,12 @@ Pólizas: `POL-NOR-001..020`, `POL-SUR-001..020`, `POL-CEN-001..020`; las
 ./scripts/experiment/correr.sh --periodos 5 --repeticiones 3
 ```
 
+Al arrancar se abre el reporte en vivo en `http://127.0.0.1:8090` (o
+`PUERTO_TABLERO`). Muestra el paso en curso, los criterios recalculados con
+las repeticiones ya cerradas y la ventana de exposición; durante la ráfaga,
+las respuestas 200 y 401 de cada atacante. El informe Markdown se escribe al
+final. `--sin-tablero` no abre esa página.
+
 Cada repetición **reinicia el stack desde cero** (`docker compose down -v &&
 up --wait`), porque un empleado revocado no se puede reutilizar, y luego
 ejecuta:

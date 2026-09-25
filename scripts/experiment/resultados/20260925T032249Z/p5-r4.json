@@ -1,0 +1,1165 @@
+{
+  "periodo_auditoria_s": 5,
+  "repeticion": 4,
+  "escenarios": {
+    "atacante_asr23": {
+      "employee_id": "E-ASN-01",
+      "poliza_id": "POL-NOR-001",
+      "session_id": "01a0d69c-d9e1-779e-bb5c-cd8f8528bbd3",
+      "estado_aprobacion_1": 202,
+      "estado_otp": 403,
+      "tipo_error_otp": "otp-fallido",
+      "estado_aprobacion_2": 401,
+      "tipo_error_aprobacion_2": "sesion-revocada",
+      "latencia_revocacion_ms": 150.49973600071098
+    },
+    "legitimo_asr23": {
+      "employee_id": "E-ASN-02",
+      "poliza_id": "POL-NOR-002",
+      "session_id": "01a0d69c-db08-709d-beb6-ae351c437e57",
+      "estado_aprobacion_1": 202,
+      "estado_otp": 200,
+      "estado_operacion_resultado": "APROBADA",
+      "estado_consulta_2": 200
+    },
+    "atacante_asr31_secuencial": {
+      "employee_id": "E-ASN-03",
+      "poliza_id": "POL-SUR-001",
+      "session_id": "01a0d69c-dbab-7517-b006-22ac7de7f8be",
+      "estado_consulta_1": 200,
+      "estado_consulta_2": 401,
+      "tipo_error_consulta_2": "sesion-revocada"
+    },
+    "legitimo_inusual_asr31": {
+      "employee_id": "E-ASM-01",
+      "poliza_id": "POL-CEN-001",
+      "session_id": "01a0d69c-fb3d-743c-be6c-2f347454f095",
+      "estado_consulta_1": 200,
+      "estado_consulta_2": 200
+    }
+  },
+  "locust_filas": [
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.0054155249999894295,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.004705729001216241,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.0038943130002735415,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.0040240329999505775,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.010887970000112546,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.12524479599960614,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.12084272100037197,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.1261392340002203,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.11529774500013446,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.12666732700017747,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.24398772299900884,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.25295190299948445,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.2530910950008547,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.24381051400087017,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.24254476299938688,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.3506213869986823,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.35810137199950987,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.3604179819994897,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.3497151510000549,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.3508054109988734,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.4683897609993437,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.47683404500094184,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.47620029100107786,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.4652577479992033,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.46587980999902356,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.5850894060004066,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.5945388340005593,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.5977894830011792,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.5846537969991914,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.5791433159993176,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.7137536169993837,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.7201368969999749,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.7088647140008106,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.725710706999962,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.6962680229989928,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.8368729209996673,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.8460466140004428,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.833419500000673,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.8202975069998502,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.8531986440011678,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 0.9509752949998074,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 0.9585009870006616,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 0.9471968230009224,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 0.9632531530005508,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 0.9339970029996039,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.069877500000075,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.064271227000063,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.0782602510007564,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.0827448809995985,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.0550335009993432,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.186244782000358,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.1937025290008023,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.1968246380001801,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.1827062100001058,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.1689472229991225,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.3096403979998286,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.3172114810004132,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.2883359190000192,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.3164415360006387,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.3045846650002204,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.44535981899935,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.4379127829997742,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.4554683480000676,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.4270523579998553,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.4569111750006414,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.5743272959989554,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.5524553369996283,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.5840533900009177,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.5880068440001196,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.5737270310000895,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.709521140999641,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.6911596879999706,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.7246456070006388,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.7111131199999363,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.725519052000891,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.8410959529992397,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.8272666729990306,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.8607220200010488,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.8632078640002874,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.8511132940002426,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 1.9747531749999325,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 1.9521757849997812,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 1.9837357240012352,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 1.987567117999788,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 1.9739426899996033,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.0983652699997037,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.105818650999936,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.0987510949998978,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.0859295449990896,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.1163115020008263,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.226180714998918,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.234432511000705,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.2243649390002247,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.243141132999881,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.213409170999512,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.3499340969992772,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.359011308000845,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.3470107590001135,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.3341552980000415,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.3669346570004564,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.4750850849995913,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.482148560000496,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.4866040180004347,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.4724786869992386,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.4582539519997226,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.609508679999635,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.616748713000561,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.6237233730007574,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.609916905999853,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.5965820319997874,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.715245638999477,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.722924302001047,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.7310398320005334,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.70277701699888,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.7180904670003656,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.821079486999224,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.829781661001107,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.8398976280004717,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.8109548939992237,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.8264695680009027,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 2.958189611999842,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 2.958505206999689,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 2.95273651000025,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 2.9405166689994076,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 2.9726834450011665,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.0764737720000994,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.0663744199991925,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.077552618999107,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.08461503000035,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.0550915599997097,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.1959512829998857,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.194936890000463,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.171477206999043,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.202963746000023,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.1886798409996118,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.3056555849998404,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.30474875300024,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.2828777640006592,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.3140599590005877,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.29998794399944,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.411901305000356,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.410909696998715,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.389730951999809,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.4205059020005137,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.4064316149997467,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.5346734349986946,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.5417340399999375,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.515395159000036,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.53302229899964,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.550282182999581,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.04",
+      "t": 3.6656587830002536,
+      "estado": 401,
+      "tipo": "sesion-revocada"
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.655841264000628,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.6699575790007657,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.645606628999303,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.670966249999765,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.05",
+      "t": 3.781861874000242,
+      "estado": 401,
+      "tipo": "sesion-revocada"
+    },
+    {
+      "usuario": "asesor.norte.07",
+      "t": 3.7805984709993936,
+      "estado": 401,
+      "tipo": "sesion-revocada"
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.7674435489989264,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.783492042000944,
+      "estado": 200,
+      "tipo": null
+    },
+    {
+      "usuario": "asesor.norte.06",
+      "t": 3.874995463000232,
+      "estado": 401,
+      "tipo": "sesion-revocada"
+    },
+    {
+      "usuario": "asesor.norte.08",
+      "t": 3.8912344410000514,
+      "estado": 401,
+      "tipo": "sesion-revocada"
+    }
+  ],
+  "alertas": [
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:29:58.000Z",
+      "correlation_id": "01a0d69c-da08-765e-9c68-1c2713107b5b",
+      "detalle": {
+        "operacion": "aprobar_poliza",
+        "poliza_id": "POL-NOR-001"
+      },
+      "employee_id": "E-ASN-01",
+      "evento_id": "01a0d69c-da22-748c-b524-91d7d57751f2",
+      "motivo": "OTP_FALLIDO",
+      "recibida_en": "2026-09-25T03:29:58.828Z",
+      "revocada_en": "2026-09-25T03:29:58.000Z",
+      "session_id": "01a0d69c-d9e1-779e-bb5c-cd8f8528bbd3"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:04.000Z",
+      "correlation_id": "01a0d69c-dbbb-7261-8f6c-8ac41eb36771",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69c-dbc0-71f0-a412-94853ccc6bb5",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-03",
+      "evento_id": "01a0d69c-eee7-7173-ac80-6f3a0291bd0d",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:04.136Z",
+      "revocada_en": "2026-09-25T03:30:04.000Z",
+      "session_id": "01a0d69c-dbab-7517-b006-22ac7de7f8be"
+    },
+    {
+      "accion": "ALERTAR",
+      "bloqueado_en": null,
+      "correlation_id": "01a0d69c-fb4e-70ff-b7dd-ba505972ce8a",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte",
+          "centro"
+        ],
+        "evento_auditoria_id": "01a0d69c-fb53-7042-9c7b-34233d626418",
+        "region_consultada": "centro"
+      },
+      "employee_id": "E-ASM-01",
+      "evento_id": "01a0d69d-027b-7745-b194-a4ad1b21322c",
+      "motivo": "CONSULTA_INUSUAL",
+      "recibida_en": "2026-09-25T03:30:09.150Z",
+      "revocada_en": null,
+      "session_id": "01a0d69c-fb3d-743c-be6c-2f347454f095"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:19.000Z",
+      "correlation_id": "01a0d69d-1bbe-7493-a3fc-eee15cdd5dbb",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69d-1bc2-7726-9688-eadd2a8e811d",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-04",
+      "evento_id": "01a0d69d-29c5-7632-983d-5edd2cac275f",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:19.208Z",
+      "revocada_en": "2026-09-25T03:30:19.000Z",
+      "session_id": "01a0d69d-1bb0-72cc-97ff-17b1c8edc947"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:19.000Z",
+      "correlation_id": "01a0d69d-1bc0-709b-9c2a-3793135e13d7",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69d-1bc4-744d-9399-59df15dd5e82",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-05",
+      "evento_id": "01a0d69d-29cb-7774-9d8d-c745af435f84",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:19.280Z",
+      "revocada_en": "2026-09-25T03:30:19.000Z",
+      "session_id": "01a0d69d-1bb4-7557-8485-6ad6ae2baddc"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:19.000Z",
+      "correlation_id": "01a0d69d-1bc4-7549-b8b9-1fd0509a858c",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69d-1bc6-74eb-82f4-aff120111a7d",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-07",
+      "evento_id": "01a0d69d-29d0-768d-8ad4-41ffcf52dc8d",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:19.336Z",
+      "revocada_en": "2026-09-25T03:30:19.000Z",
+      "session_id": "01a0d69d-1bb7-70de-996d-c799872f0a85"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:19.000Z",
+      "correlation_id": "01a0d69d-1bcd-7553-b48a-7de379bd3e5e",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69d-1bd0-72e1-b64c-1360717082db",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-08",
+      "evento_id": "01a0d69d-29ed-73f0-8f36-aa19a5b773ea",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:19.403Z",
+      "revocada_en": "2026-09-25T03:30:19.000Z",
+      "session_id": "01a0d69d-1bb7-70de-996d-c798f1f628af"
+    },
+    {
+      "accion": "REVOCAR",
+      "bloqueado_en": "2026-09-25T03:30:19.000Z",
+      "correlation_id": "01a0d69d-1bdc-70a2-b153-8eba135bdd15",
+      "detalle": {
+        "accion": "CONSULTA_POLIZA",
+        "alcance_autorizado": [
+          "norte"
+        ],
+        "evento_auditoria_id": "01a0d69d-1be3-7577-99af-16041a8b78f9",
+        "region_consultada": "sur"
+      },
+      "employee_id": "E-ASN-06",
+      "evento_id": "01a0d69d-29f1-7343-8054-fd8322333501",
+      "motivo": "ALCANCE_NO_AUTORIZADO",
+      "recibida_en": "2026-09-25T03:30:19.466Z",
+      "revocada_en": "2026-09-25T03:30:19.000Z",
+      "session_id": "01a0d69d-1bb6-7380-8b90-a5989066e223"
+    }
+  ],
+  "alertas_duplicadas_en_logs": 151,
+  "estados_polizas": {
+    "POL-NOR-001": "PENDIENTE",
+    "POL-NOR-002": "APROBADA"
+  }
+}
