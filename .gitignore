@@ -1,6 +1,3 @@
-# Entorno local — el contrato de configuración es example.env, que sí se commitea
-.env
-
 # Python
 .venv/
 __pycache__/
