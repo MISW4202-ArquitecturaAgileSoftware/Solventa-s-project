@@ -1,10 +1,7 @@
-"""Emisión y verificación de JWT HS256 con PyJWT (§3.3).
+"""Emisión y verificación de JWT (HS256).
 
-Claims: `sub` (employee_id), `sid` (session_id), `rol`, `iat`, `exp`.
-
-La expiración se comprueba aquí y no dentro de PyJWT por dos razones: la
-respuesta `EXPIRADA` debe llevar el `session_id`, que solo se conoce tras
-validar la firma, y el reloj se inyecta para poder probarla sin esperar.
+Solo Autenticación conoce el secreto. El gateway no interpreta el token: lo
+envía aquí a verificar, porque la revocación solo se conoce en esta base.
 """
 
 from dataclasses import dataclass
@@ -12,19 +9,22 @@ from datetime import datetime
 
 import jwt
 
-from autenticacion.contracts import Rol, desde_epoch
+from autenticacion.contracts import Rol
 
-ALGORITMO = "HS256"
-_CLAIMS_OBLIGATORIOS = ["sub", "sid", "rol", "iat", "exp"]
-
-
-class TokenInvalido(Exception):
-    """Firma inválida, algoritmo distinto de HS256, formato roto o claims ausentes."""
+_ALGORITMO = "HS256"
 
 
-class TokenExpirado(Exception):
-    def __init__(self, session_id: str) -> None:
-        super().__init__(f"token de la sesión {session_id} expirado")
+class ErrorToken(Exception):
+    pass
+
+
+class ErrorTokenInvalido(ErrorToken):
+    pass
+
+
+class ErrorTokenExpirado(ErrorToken):
+    def __init__(self, session_id: str | None) -> None:
+        super().__init__("token expirado")
         self.session_id = session_id
 
 
@@ -33,66 +33,45 @@ class Claims:
     employee_id: str
     session_id: str
     rol: Rol
-    emitido_en: datetime
-    expira_en: datetime
 
 
 def emitir(
-    secreto: str, ttl_s: int, employee_id: str, session_id: str, rol: Rol, ahora: datetime
-) -> tuple[str, Claims]:
-    # Los claims de tiempo son enteros (RFC 7519 NumericDate); se trunca `ahora`
-    # para que lo guardado en `sesiones` y lo firmado coincidan al segundo.
-    iat = int(ahora.timestamp())
-    exp = iat + ttl_s
-    token = jwt.encode(
-        {"sub": employee_id, "sid": session_id, "rol": rol.value, "iat": iat, "exp": exp},
+    secreto: str,
+    employee_id: str,
+    session_id: str,
+    rol: Rol,
+    emitido_en: datetime,
+    expira_en: datetime,
+) -> str:
+    return jwt.encode(
+        {
+            "sub": employee_id,
+            "sid": session_id,
+            "rol": rol.value,
+            "iat": int(emitido_en.timestamp()),
+            "exp": int(expira_en.timestamp()),
+        },
         secreto,
-        algorithm=ALGORITMO,
-    )
-    return token, Claims(
-        employee_id=employee_id,
-        session_id=session_id,
-        rol=rol,
-        emitido_en=desde_epoch(iat),
-        expira_en=desde_epoch(exp),
+        algorithm=_ALGORITMO,
     )
 
 
-def verificar(token: str, secreto: str, ahora: datetime) -> Claims:
+def decodificar(secreto: str, token: str) -> Claims:
     try:
-        crudos = jwt.decode(
-            token,
-            secreto,
-            # Lista cerrada: impide `alg: none` y la confusión de algoritmos.
-            algorithms=[ALGORITMO],
-            # El tiempo lo juzga este módulo con el reloj inyectado, no PyJWT
-            # con el reloj del sistema.
-            options={"require": _CLAIMS_OBLIGATORIOS, "verify_exp": False, "verify_iat": False},
-        )
-    except jwt.PyJWTError as err:
-        raise TokenInvalido(str(err)) from err
+        crudo = jwt.decode(token, secreto, algorithms=[_ALGORITMO])
+    except jwt.ExpiredSignatureError as err:
+        # La firma es válida: se pueden leer los claims para reportar qué sesión
+        # expiró, aunque ya no sirva.
+        sin_exp = jwt.decode(token, secreto, algorithms=[_ALGORITMO], options={"verify_exp": False})
+        sid = sin_exp.get("sid")
+        raise ErrorTokenExpirado(sid if isinstance(sid, str) else None) from err
+    except jwt.InvalidTokenError as err:
+        raise ErrorTokenInvalido(str(err)) from err
 
-    claims = _leer_claims(crudos)
-    # RFC 7519 §4.1.4: no se acepta "en o después" del instante `exp`.
-    if ahora >= claims.expira_en:
-        raise TokenExpirado(claims.session_id)
-    return claims
-
-
-def _leer_claims(crudos: dict[str, object]) -> Claims:
-    sub, sid, rol, iat, exp = (crudos.get(c) for c in _CLAIMS_OBLIGATORIOS)
-    if not isinstance(sub, str) or not sub or not isinstance(sid, str) or not sid:
-        raise TokenInvalido("sub y sid deben ser cadenas no vacías")
-    if not isinstance(iat, int) or not isinstance(exp, int):
-        raise TokenInvalido("iat y exp deben ser enteros")
+    sub, sid, rol = crudo.get("sub"), crudo.get("sid"), crudo.get("rol")
+    if not isinstance(sub, str) or not isinstance(sid, str) or not isinstance(rol, str):
+        raise ErrorTokenInvalido("claims incompletos")
     try:
-        rol_valido = Rol(str(rol))
+        return Claims(employee_id=sub, session_id=sid, rol=Rol(rol))
     except ValueError as err:
-        raise TokenInvalido(f"rol desconocido: {rol!r}") from err
-    return Claims(
-        employee_id=sub,
-        session_id=sid,
-        rol=rol_valido,
-        emitido_en=desde_epoch(iat),
-        expira_en=desde_epoch(exp),
-    )
+        raise ErrorTokenInvalido("rol desconocido") from err

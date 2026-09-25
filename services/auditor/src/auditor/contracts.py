@@ -1,9 +1,8 @@
-"""Contratos locales: `EventoAuditoria` (§4.3), el cuerpo y la respuesta de
-`POST validacion/v1/anomalias` (§3.4) y la entidad `historial`.
+"""Contratos locales: el `EventoAuditoria` que se consume (§4.3) y el cuerpo de
+`POST /v1/anomalias` que se envía a Validación (§3.4).
 
-La lectura es estricta: un evento sin los campos que el Auditor necesita es un
-`ErrorEventoInvalido`, que el ciclo registra y confirma en lugar de reintentar
-para siempre.
+La lectura es estricta y explícita: un evento malformado se detecta aquí, con
+el campo señalado, en vez de fallar a medias más adelante en el ciclo.
 """
 
 from collections.abc import Mapping
@@ -13,19 +12,52 @@ from enum import StrEnum
 from typing import Any, Self
 
 
-class ErrorEventoInvalido(Exception):
-    """El mensaje del stream no cumple el contrato de §4.3."""
+class ErrorContrato(Exception):
+    def __init__(self, campo: str, regla: str) -> None:
+        super().__init__(f"{campo} {regla}")
+        self.campo = campo
 
 
-class Decision(StrEnum):
-    #: Región autorizada pero inusual: se incorpora al historial.
-    ALERTAR = "ALERTAR"
-    #: Región fuera de alcance: NO se incorpora; la siguiente consulta vuelve
-    #: a informarse y Reacción absorbe el duplicado.
-    REVOCAR = "REVOCAR"
+_AUSENTE: Any = object()
 
 
-# --- Tiempo -------------------------------------------------------------------
+def _exigir(dato: Mapping[str, Any], campo: str) -> Any:
+    valor = dato.get(campo, _AUSENTE)
+    if valor is _AUSENTE:
+        raise ErrorContrato(campo, "es obligatorio")
+    return valor
+
+
+def _leer_texto(dato: Mapping[str, Any], campo: str) -> str:
+    valor = _exigir(dato, campo)
+    if not isinstance(valor, str) or not valor.strip():
+        raise ErrorContrato(campo, "debe ser una cadena no vacía")
+    return valor
+
+
+def _leer_texto_opcional(dato: Mapping[str, Any], campo: str) -> str | None:
+    valor = _exigir(dato, campo)
+    if valor is None:
+        return None
+    if not isinstance(valor, str) or not valor.strip():
+        raise ErrorContrato(campo, "debe ser una cadena no vacía o null")
+    return valor
+
+
+def _leer_enum[E: StrEnum](dato: Mapping[str, Any], campo: str, enumeracion: type[E]) -> E:
+    crudo = _leer_texto(dato, campo)
+    try:
+        return enumeracion(crudo)
+    except ValueError as err:
+        admitidos = ", ".join(miembro.value for miembro in enumeracion)
+        raise ErrorContrato(campo, f"debe ser uno de: {admitidos}") from err
+
+
+def _leer_mapa(dato: Mapping[str, Any], campo: str) -> Mapping[str, Any]:
+    valor = _exigir(dato, campo)
+    if not isinstance(valor, Mapping):
+        raise ErrorContrato(campo, "debe ser un objeto JSON")
+    return valor
 
 
 def ahora_utc() -> datetime:
@@ -33,125 +65,156 @@ def ahora_utc() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def iso_utc_ms(momento: datetime) -> str:
+def iso_utc(momento: datetime) -> str:
     return momento.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def desde_iso_utc(valor: str) -> datetime:
-    momento = datetime.fromisoformat(valor.replace("Z", "+00:00"))
-    if momento.tzinfo is None:
-        raise ValueError(f"instante sin zona horaria: {valor!r}")
-    return momento
+    return datetime.fromisoformat(valor.replace("Z", "+00:00"))
 
 
-# --- Lectura estricta ---------------------------------------------------------
+class Rol(StrEnum):
+    ASESOR = "asesor"
+    SUPERVISOR = "supervisor"
 
 
-def _texto(dato: Mapping[str, Any], campo: str) -> str:
-    valor = dato.get(campo)
-    if not isinstance(valor, str) or not valor.strip():
-        raise ErrorEventoInvalido(f"{campo} debe ser una cadena no vacía")
-    return valor
+class Accion(StrEnum):
+    CONSULTA_POLIZA = "CONSULTA_POLIZA"
+    APROBACION_POLIZA = "APROBACION_POLIZA"
 
 
-def _texto_o_nulo(dato: Mapping[str, Any], campo: str) -> str | None:
-    if campo not in dato:
-        raise ErrorEventoInvalido(f"{campo} es obligatorio (puede ser null)")
-    valor = dato[campo]
-    if valor is None:
-        return None
-    if not isinstance(valor, str) or not valor.strip():
-        raise ErrorEventoInvalido(f"{campo} debe ser una cadena no vacía o null")
-    return valor
+class Decision(StrEnum):
+    REVOCAR = "REVOCAR"
+    ALERTAR = "ALERTAR"
+    #: Validación nunca la envía: el Auditor la usa internamente cuando el
+    #: empleado le resulta desconocido (404) y no hay nada que decidir.
+    IGNORAR = "IGNORAR"
 
 
-def _objeto(dato: Mapping[str, Any], campo: str) -> Mapping[str, Any]:
-    valor = dato.get(campo)
-    if not isinstance(valor, dict):
-        raise ErrorEventoInvalido(f"{campo} debe ser un objeto JSON")
-    return valor
+@dataclass(frozen=True, slots=True)
+class Actor:
+    employee_id: str
+    session_id: str
+    rol: Rol
+
+    @classmethod
+    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
+        return cls(
+            employee_id=_leer_texto(dato, "employee_id"),
+            session_id=_leer_texto(dato, "session_id"),
+            rol=_leer_enum(dato, "rol", Rol),
+        )
+
+    def a_dict(self) -> dict[str, Any]:
+        return {
+            "employee_id": self.employee_id,
+            "session_id": self.session_id,
+            "rol": self.rol.value,
+        }
 
 
-# --- Evento de auditoría (§4.3) -----------------------------------------------
+@dataclass(frozen=True, slots=True)
+class Recurso:
+    tipo: str
+    poliza_id: str
+    region: str | None
+    cliente_id: str | None
+
+    @classmethod
+    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
+        return cls(
+            tipo=_leer_texto(dato, "tipo"),
+            poliza_id=_leer_texto(dato, "poliza_id"),
+            region=_leer_texto_opcional(dato, "region"),
+            cliente_id=_leer_texto_opcional(dato, "cliente_id"),
+        )
+
+    def a_dict(self) -> dict[str, Any]:
+        return {
+            "tipo": self.tipo,
+            "poliza_id": self.poliza_id,
+            "region": self.region,
+            "cliente_id": self.cliente_id,
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class EventoAuditoria:
-    """Solo los campos que el Auditor usa para evaluar el acceso."""
-
     evento_id: str
     correlation_id: str
+    tipo: str
+    version: str
     emitido_en: datetime
-    employee_id: str
-    session_id: str
-    accion: str
-    poliza_id: str | None
-    #: `None` si la póliza no existe: el evento se ignora (§4.3).
-    region: str | None
+    actor: Actor
+    accion: Accion
+    recurso: Recurso
+    resultado: str
 
     @classmethod
-    def desde_dict(cls, dato: Any) -> Self:
-        if not isinstance(dato, dict):
-            raise ErrorEventoInvalido("el evento debe ser un objeto JSON")
-        actor = _objeto(dato, "actor")
-        recurso = _objeto(dato, "recurso")
-        try:
-            emitido_en = desde_iso_utc(_texto(dato, "emitido_en"))
-        except ValueError as err:
-            raise ErrorEventoInvalido(f"emitido_en inválido: {err}") from err
+    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
         return cls(
-            evento_id=_texto(dato, "evento_id"),
-            correlation_id=_texto(dato, "correlation_id"),
-            emitido_en=emitido_en,
-            employee_id=_texto(actor, "employee_id"),
-            session_id=_texto(actor, "session_id"),
-            accion=_texto(dato, "accion"),
-            poliza_id=_texto_o_nulo(recurso, "poliza_id"),
-            region=_texto_o_nulo(recurso, "region"),
+            evento_id=_leer_texto(dato, "evento_id"),
+            correlation_id=_leer_texto(dato, "correlation_id"),
+            tipo=_leer_texto(dato, "tipo"),
+            version=_leer_texto(dato, "version"),
+            emitido_en=desde_iso_utc(_leer_texto(dato, "emitido_en")),
+            actor=Actor.desde_dict(_leer_mapa(dato, "actor")),
+            accion=_leer_enum(dato, "accion", Accion),
+            recurso=Recurso.desde_dict(_leer_mapa(dato, "recurso")),
+            resultado=_leer_texto(dato, "resultado"),
         )
 
-
-# --- POST validacion/v1/anomalias (§3.4) ---------------------------------------
+    def a_dict(self) -> dict[str, Any]:
+        return {
+            "evento_id": self.evento_id,
+            "correlation_id": self.correlation_id,
+            "tipo": self.tipo,
+            "version": self.version,
+            "emitido_en": iso_utc(self.emitido_en),
+            "actor": self.actor.a_dict(),
+            "accion": self.accion.value,
+            "recurso": self.recurso.a_dict(),
+            "resultado": self.resultado,
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class CuerpoAnomalia:
+    """Lo que el Auditor envía a `POST validacion/v1/anomalias` (§3.4)."""
+
     evento_id: str
     correlation_id: str
     employee_id: str
     session_id: str
-    accion: str
+    accion: Accion
     region_consultada: str
 
-    @classmethod
-    def desde_evento(cls, evento: EventoAuditoria, region: str) -> Self:
-        return cls(
-            evento_id=evento.evento_id,
-            correlation_id=evento.correlation_id,
-            employee_id=evento.employee_id,
-            session_id=evento.session_id,
-            accion=evento.accion,
-            region_consultada=region,
-        )
-
-    def a_dict(self) -> dict[str, str]:
+    def a_dict(self) -> dict[str, Any]:
         return {
             "evento_id": self.evento_id,
             "correlation_id": self.correlation_id,
             "employee_id": self.employee_id,
             "session_id": self.session_id,
-            "accion": self.accion,
+            "accion": self.accion.value,
             "region_consultada": self.region_consultada,
         }
 
 
-# --- Historial ----------------------------------------------------------------
+@dataclass(frozen=True, slots=True)
+class RespuestaAnomalia:
+    evento_id: str
+    decision: Decision
+
+    @classmethod
+    def desde_dict(cls, dato: Mapping[str, Any]) -> Self:
+        return cls(
+            evento_id=_leer_texto(dato, "evento_id"),
+            decision=_leer_enum(dato, "decision", Decision),
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class Habito:
-    """Una fila de `historial`: una región que el empleado consulta habitualmente."""
-
+class HistorialEntrada:
     employee_id: str
     region: str
     conteo: int

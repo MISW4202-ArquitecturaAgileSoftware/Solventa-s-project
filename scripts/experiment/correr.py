@@ -1,424 +1,273 @@
-"""Orquesta el experimento de detección (ASR-11) y enmascaramiento (ASR-12).
+"""Orquesta el experimento F9 (PLAN-IMPLEMENTACION.md §6, F9): por cada
+`PERIODO_AUDITORIA_S` y cada repetición, reinicia el stack con semillas
+limpias, corre los cuatro escenarios secuenciales deterministas, lanza la
+ráfaga concurrente de Locust, vuelca las alertas de Reacción y guarda toda la
+evidencia en JSON. Al final genera `docs/RESULTADOS-EXPERIMENTO.md`.
 
-Las tres corridas, la inyección de fallos y Locust siguen siendo los mismos
-pasos; este módulo los encadena en Python para no pasar números por stdout
-entre cinco procesos.
-
-    python scripts/experiment/correr.py
-    python scripts/experiment/correr.py --rapido
-    python scripts/experiment/correr.py --sin-ui
-
-`RAPIDO=1` y `SIN_UI=1` siguen valiendo, para no romper los comandos ya
-documentados. Locust y Docker Compose se invocan como procesos; el resto
-(métricas, drenaje, tasa, informe) se importa.
+Un empleado revocado o bloqueado no se puede reutilizar: por eso cada
+repetición reinicia el stack (`docker compose down -v && up --wait`), que
+resiembra los datos de §2.2 y §2.3.
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
+import dataclasses
 import json
 import os
 import subprocess
-import time
-import webbrowser
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from threading import Timer
-from typing import Any, TextIO
+from typing import Any
 
-import _metricas
-import anotar_deteccion
+import requests  # type: ignore[import-untyped]
+
+import escenarios
 import reporte
-import tablero
-from locust_carga.drenaje import esperar_metricas_estables
-
-RAIZ = Path(__file__).resolve().parents[2]
-RES = RAIZ / "scripts" / "experiment" / "resultados"
-LOCUSTFILE = RAIZ / "scripts" / "experiment" / "locustfile.py"
-INYECTAR = RAIZ / "scripts" / "experiment" / "inyectar.sh"
-
-MODOS: tuple[str, ...] = (
-    "premium_offset",
-    "factor_skip",
-    "rate_table_stale",
-    "rounding_drift",
-    "out_of_range",
-    "silent_zero",
-    "slow",
-    "crash",
+from cliente import ClienteExperimento
+from entorno import (
+    ATACANTE_ASR23,
+    ATACANTE_ASR31_SECUENCIAL,
+    LEGITIMO_ASR23,
+    LEGITIMO_INUSUAL_ASR31,
+    PASSWORD,
+    POLIZA_ATACANTE_ASR23,
+    POLIZA_CENTRO_INUSUAL,
+    POLIZA_LEGITIMO_ASR23,
+    POLIZA_SUR_SECUENCIAL,
+    SUPERVISOR,
+    Entorno,
+    desde_env,
 )
 
-USUARIOS_PICO = 10
-# El pacing teórico es 500/min; en la práctica queda ~435. El tope no puede
-# ir justo: si Locust termina un segundo después, correr.py aborta sin leer
-# el JSON que el SIGTERM acaba de escribir.
-MARGEN_S = 90
-RITMO_EFECTIVO = 0.8
+RAIZ = Path(__file__).resolve().parents[2]
+DIRECTORIO_RESULTADOS = RAIZ / "scripts" / "experiment" / "resultados"
+RUTA_REINICIAR = RAIZ / "scripts" / "experiment" / "reiniciar.sh"
+RUTA_LOCUSTFILE = RAIZ / "scripts" / "experiment" / "locustfile.py"
 
-Inyectar = Callable[[str, str], None]
-Cargar = Callable[[str, int, Path, str], None]
-Anotar = Callable[[Path, str, int, int], dict[str, Any]]
-
-
-def cargar_env(ruta: Path) -> None:
-    """Carga KEY=VALUE de `.env` sin pisar lo que ya está en el entorno."""
-    if not ruta.is_file():
-        return
-    for cruda in ruta.read_text(encoding="utf-8").splitlines():
-        linea = cruda.strip()
-        if not linea or linea.startswith("#") or "=" not in linea:
-            continue
-        clave, _, valor = linea.partition("=")
-        os.environ.setdefault(clave.strip(), valor.strip().strip("'\""))
+#: Margen sobre `3 * periodo_s`: suficiente para un ciclo de auditoría de
+#: sobra más la ventana de bloqueo de Reacción, sin alargar la corrida.
+DURACION_LOCUST_MARGEN_S = 5
+USUARIOS_LOCUST = 8
 
 
-def tamanos(*, rapido: bool) -> tuple[int, int, int]:
-    """n de línea base, por modo de detección y de enmascaramiento."""
-    if rapido:
-        return 200, 100, 200
-    return 5000, 1000, 5000
+def _parsear_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Corre el experimento de F9.")
+    parser.add_argument("--periodos", default="2,5,10", help="lista separada por comas")
+    parser.add_argument("--repeticiones", type=int, default=5)
+    parser.add_argument(
+        "--rapido", action="store_true", help="equivale a --periodos 2 --repeticiones 1"
+    )
+    parser.add_argument(
+        "--sin-reinicio", action="store_true", help="no reinicia el stack; solo para depurar"
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.rapido:
+        args.periodos = "2"
+        args.repeticiones = 1
+    return args
 
 
-def segundos_tope(n: int, por_minuto: float) -> int:
-    ritmo = max(por_minuto * RITMO_EFECTIVO, 1.0)
-    return int(n * 60 / ritmo) + MARGEN_S
+def _reiniciar(periodo: int) -> None:
+    entorno_shell = {**os.environ, "PERIODO_AUDITORIA_S": str(periodo)}
+    subprocess.run([str(RUTA_REINICIAR)], check=True, cwd=RAIZ, env=entorno_shell)
 
 
-def comando_locust(
-    *,
-    host: str,
-    segundos: int,
-    sin_ui: bool,
-    puerto: int,
-    mantener_ui: bool = False,
-) -> list[str]:
+def _correr_locust(
+    entorno: Entorno, periodo: int, ruta_jsonl: Path, prefijo_csv: Path
+) -> list[dict[str, Any]]:
+    ruta_jsonl.unlink(missing_ok=True)
+    duracion_s = 3 * periodo + DURACION_LOCUST_MARGEN_S
     comando = [
         "locust",
         "-f",
-        str(LOCUSTFILE),
-        "--users",
-        str(USUARIOS_PICO),
-        "--spawn-rate",
-        str(USUARIOS_PICO),
+        str(RUTA_LOCUSTFILE),
+        "--headless",
+        "-u",
+        str(USUARIOS_LOCUST),
+        "-r",
+        str(USUARIOS_LOCUST),
+        "-t",
+        f"{duracion_s}s",
         "--host",
-        host,
-        "--exit-code-on-error",
-        "0",
+        entorno.url_gateway,
+        "--csv",
+        str(prefijo_csv),
+        "--only-summary",
     ]
-    if sin_ui:
-        comando += ["--run-time", f"{segundos}s", "--headless", "--only-summary"]
-    else:
-        comando += [
-            "--autostart",
-            "--web-host",
-            "127.0.0.1",
-            "--web-port",
-            str(puerto),
-        ]
-        if not mantener_ui:
-            comando += ["--run-time", f"{segundos}s", "--autoquit", "0"]
-    return comando
+    entorno_shell = {**os.environ, "RESULTADOS_JSONL": str(ruta_jsonl)}
+    resultado = subprocess.run(comando, cwd=RAIZ, env=entorno_shell)
+    if resultado.returncode != 0:
+        # Locust sale con código distinto de 0 si `--headless` no pudo
+        # arrancar (host inválido, `-f` inexistente…): un fallo real. Pero
+        # nuestro propio JSONL, no el código de salida, es la evidencia de si
+        # la ráfaga corrió; si el archivo no aparece, sí fue un fallo real.
+        print(f"  aviso: locust terminó con código {resultado.returncode}")
+    if not ruta_jsonl.is_file():
+        return []
+    return [
+        json.loads(linea)
+        for linea in ruta_jsonl.read_text(encoding="utf-8").splitlines()
+        if linea.strip()
+    ]
 
 
-def _terminar(proceso: subprocess.Popen[Any]) -> None:
-    if proceso.poll() is not None:
-        return
-    proceso.terminate()
-    try:
-        proceso.wait(timeout=15)
-    except subprocess.TimeoutExpired:
-        proceso.kill()
+def _volcar_alertas(entorno: Entorno) -> list[dict[str, Any]]:
+    """Alertas registradas por Reacción, que vive dentro de Validación."""
+    respuesta = requests.get(f"{entorno.url_validacion}/v1/alertas", timeout=10)
+    respuesta.raise_for_status()
+    alertas: list[dict[str, Any]] = respuesta.json()["alertas"]
+    return alertas
 
 
-def _salida_lista(ruta: Path) -> bool:
-    return ruta.is_file() and ruta.stat().st_size > 0
+def _contar_alertas_duplicadas() -> int:
+    """Eventos redundantes que Reacción absorbió: líneas `alerta_duplicada` en
+    los logs de Validación, el contenedor donde corre."""
+    resultado = subprocess.run(
+        ["docker", "compose", "logs", "validacion", "--no-color"],
+        check=True,
+        cwd=RAIZ,
+        capture_output=True,
+        text=True,
+    )
+    return resultado.stdout.count('"mensaje": "alerta_duplicada"')
 
 
-def _esperar_salida(
-    ruta: Path,
-    proceso: subprocess.Popen[Any],
-    tope_s: float,
-    log_locust: Path | None = None,
+def _verificar_estados_polizas(
+    cliente: ClienteExperimento, polizas: Sequence[str]
+) -> dict[str, str]:
+    login = cliente.login(SUPERVISOR.usuario, PASSWORD)
+    token = str(login.cuerpo["token"])
+    estados: dict[str, str] = {}
+    for poliza_id in polizas:
+        respuesta = cliente.consultar_poliza(token, poliza_id)
+        estados[poliza_id] = str(respuesta.cuerpo.get("resultado", {}).get("estado"))
+    return estados
+
+
+def _imagenes_docker() -> dict[str, str]:
+    resultado = subprocess.run(
+        ["docker", "compose", "images", "--format", "json"],
+        check=True,
+        cwd=RAIZ,
+        capture_output=True,
+        text=True,
+    )
+    filas: list[dict[str, Any]] = json.loads(resultado.stdout) if resultado.stdout.strip() else []
+    return {str(fila["Repository"]): str(fila["Tag"]) for fila in filas}
+
+
+def _correr_repeticion(
+    cliente: ClienteExperimento, periodo: int, repeticion: int, directorio: Path
 ) -> None:
-    inicio = time.perf_counter()
-    while time.perf_counter() - inicio < tope_s:
-        if _salida_lista(ruta):
-            return
-        if proceso.poll() is not None:
-            break
-        time.sleep(0.2)
-    # SIGTERM dispara test_stop y Locust escribe el JSON. Hay que esperar a
-    # que eso ocurra ANTES de declarar el fallo.
-    _terminar(proceso)
-    if _salida_lista(ruta):
-        return
-    extra = f"\n    log: {log_locust}" if log_locust is not None else ""
-    if log_locust is not None and log_locust.is_file():
-        cola = log_locust.read_text(encoding="utf-8", errors="replace")[-2000:]
-        extra += f"\n{cola}"
-    raise SystemExit(f"FALLO: Locust no escribió {ruta}{extra}")
-
-
-def _correr(
-    comando: Sequence[str],
-    *,
-    stdout: int | TextIO | None = None,
-    stderr: int | TextIO | None = None,
-) -> None:
-    subprocess.run(comando, check=True, cwd=RAIZ, stdout=stdout, stderr=stderr)
-
-
-def inyectar(replica: str, modo: str) -> None:
-    _correr([str(INYECTAR), replica, modo])
-
-
-def restaurar() -> None:
-    silenciar: int = subprocess.DEVNULL
-    for replica in ("a", "b", "c"):
-        _correr([str(INYECTAR), replica, "none"], stdout=silenciar, stderr=silenciar)
-
-
-def vaciar_evidencia() -> None:
-    _correr(
-        [
-            "docker",
-            "compose",
-            "exec",
-            "-T",
-            "gestion-errores",
-            "sh",
-            "-c",
-            "> /datos/incidentes.jsonl",
-        ]
+    print("  escenario: atacante ASR-23…")
+    resultado_atacante_23 = escenarios.atacante_asr23(
+        cliente, ATACANTE_ASR23, POLIZA_ATACANTE_ASR23
     )
-    _correr(
-        ["docker", "compose", "restart", "gestion-errores"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    _correr(
-        ["docker", "compose", "up", "-d", "--wait"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    print(
+        f"    aprobacion_1={resultado_atacante_23.estado_aprobacion_1} "
+        f"otp={resultado_atacante_23.estado_otp}/{resultado_atacante_23.tipo_error_otp} "
+        f"aprobacion_2={resultado_atacante_23.estado_aprobacion_2}/"
+        f"{resultado_atacante_23.tipo_error_aprobacion_2} "
+        f"latencia={resultado_atacante_23.latencia_revocacion_ms:.0f}ms"
     )
 
-
-def _abrir_ui(url: str) -> None:
-    webbrowser.open(url)
-
-
-class _Carga:
-    def __init__(
-        self,
-        *,
-        sin_ui: bool,
-        sin_pausa: bool,
-        por_minuto: float,
-        puerto: int,
-        host: str,
-    ) -> None:
-        self.sin_ui = sin_ui
-        self.sin_pausa = sin_pausa
-        self.por_minuto = por_minuto
-        self.puerto = puerto
-        self.host = host
-        self._ui_abierta = False
-
-    def __call__(self, etiqueta: str, n: int, salida: Path, modo: str) -> None:
-        segundos = segundos_tope(n, self.por_minuto)
-        entorno = os.environ.copy()
-        entorno["LOCUST_ETIQUETA"] = etiqueta
-        entorno["LOCUST_N"] = str(n)
-        entorno["LOCUST_SALIDA"] = str(salida)
-        entorno["LOCUST_MODO"] = modo
-        entorno["PYTHONUNBUFFERED"] = "1"
-        experiment_dir = str(RAIZ / "scripts" / "experiment")
-        entorno["PYTHONPATH"] = (
-            experiment_dir
-            if not entorno.get("PYTHONPATH")
-            else experiment_dir + os.pathsep + entorno["PYTHONPATH"]
-        )
-        mantener_ui = not self.sin_ui and not self.sin_pausa
-        if not self.sin_ui:
-            url = f"http://127.0.0.1:{self.puerto}"
-            print(f"    UI Locust: {url}  ({etiqueta}, modo {modo})")
-            if not self._ui_abierta:
-                temporizador = Timer(1.0, _abrir_ui, args=(url,))
-                temporizador.daemon = True
-                temporizador.start()
-                self._ui_abierta = True
-        comando = comando_locust(
-            host=self.host,
-            segundos=segundos,
-            sin_ui=self.sin_ui,
-            puerto=self.puerto,
-            mantener_ui=mantener_ui,
-        )
-        if salida.is_file():
-            salida.unlink()
-        log_locust = salida.with_name(salida.stem + ".locust.log")
-        log = log_locust.open("w", encoding="utf-8")
-        proceso = subprocess.Popen(
-            comando,
-            cwd=RAIZ,
-            env=entorno,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-        )
-        try:
-            _esperar_salida(salida, proceso, float(segundos + 60), log_locust)
-            if mantener_ui:
-                print(
-                    f"    Gráficos de `{etiqueta}` listos en :{self.puerto}. "
-                    "Enter para el siguiente modo…"
-                )
-                with contextlib.suppress(EOFError):
-                    input()
-        finally:
-            _terminar(proceso)
-            log.close()
-
-
-def corrida_deteccion(
-    modos: Sequence[str],
-    n: int,
-    res: Path,
-    *,
-    inyectar_fn: Inyectar,
-    carga_fn: Cargar,
-    leer_total: Callable[[], int],
-    esperar: Callable[[], int],
-    anotar: Anotar,
-    al_empezar: Callable[[str], None] | None = None,
-    al_terminar: Callable[[str, dict[str, Any]], None] | None = None,
-) -> None:
-    """Un modo a la vez: inyecta, carga, drena el reportero y anota la tasa."""
-    for modo in modos:
-        print(f"--- {modo}")
-        if al_empezar is not None:
-            al_empezar(modo)
-        inyectar_fn("b", modo)
-        antes = leer_total()
-        ruta = res / f"B-{modo}.json"
-        carga_fn(f"deteccion-{modo}", n, ruta, modo)
-        despues = esperar()
-        datos = anotar(ruta, modo, antes, despues)
-        if al_terminar is not None:
-            al_terminar(modo, datos)
-        tasa = float(datos["tasa_deteccion"]) * 100
-        print(
-            f"    detectados {datos['incidentes_registrados']}/{datos['fallos_efectivos']} "
-            f"= {tasa:.2f}%"
-        )
-
-
-def _parsear(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Orquesta las corridas A/B/C del experimento ASR-11 y ASR-12."
+    print("  escenario: legítimo ASR-23…")
+    resultado_legitimo_23 = escenarios.legitimo_asr23(
+        cliente, LEGITIMO_ASR23, POLIZA_LEGITIMO_ASR23
     )
-    parser.add_argument(
-        "--rapido",
-        action="store_true",
-        help="versión corta (200/100/200) para depurar",
+    print(f"    resultado_operacion={resultado_legitimo_23.estado_operacion_resultado}")
+
+    print("  escenario: atacante ASR-31 secuencial…")
+    resultado_atacante_31 = escenarios.atacante_asr31_secuencial(
+        cliente, ATACANTE_ASR31_SECUENCIAL, POLIZA_SUR_SECUENCIAL, periodo
     )
-    parser.add_argument(
-        "--sin-ui",
-        action="store_true",
-        help="Locust headless, sin tablero",
-    )
-    parser.add_argument(
-        "--sin-pausa",
-        action="store_true",
-        help="no esperar Enter entre modos; Locust se cierra al terminar cada bloque",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    os.chdir(RAIZ)
-    cargar_env(RAIZ / ".env")
-    args = _parsear(argv)
-    rapido = args.rapido or bool(os.environ.get("RAPIDO"))
-    sin_ui = args.sin_ui or bool(os.environ.get("SIN_UI"))
-    sin_pausa = args.sin_pausa or bool(os.environ.get("SIN_PAUSA"))
-    por_minuto = float(os.environ.get("POR_MINUTO", "500"))
-    puerto_locust = int(os.environ.get("PUERTO_LOCUST", "8089"))
-    puerto_gateway = os.environ.get("PUERTO_GATEWAY", "8000")
-    host = f"http://localhost:{puerto_gateway}"
-
-    n_base, n_modo, n_mascara = tamanos(rapido=rapido)
-    res = RES
-    res.mkdir(parents=True, exist_ok=True)
-    for crudo in res.glob("*.json"):
-        crudo.unlink()
-
-    panel = tablero.Tablero(res / "estado.json", MODOS)
-    puerto_tablero = int(os.environ.get("PUERTO_TABLERO", "8090"))
-    if not sin_ui:
-        tablero.servir(puerto_tablero, tablero.HTML, res / "estado.json")
-        url_tablero = f"http://127.0.0.1:{puerto_tablero}"
-        print(f"Tablero de resultados: {url_tablero}")
-        temporizador = Timer(0.6, _abrir_ui, args=(url_tablero,))
-        temporizador.daemon = True
-        temporizador.start()
-
-    carga = _Carga(
-        sin_ui=sin_ui,
-        sin_pausa=sin_pausa,
-        por_minuto=por_minuto,
-        puerto=puerto_locust,
-        host=host,
+    print(
+        f"    consulta_1={resultado_atacante_31.estado_consulta_1} "
+        f"consulta_2={resultado_atacante_31.estado_consulta_2}/"
+        f"{resultado_atacante_31.tipo_error_consulta_2}"
     )
 
-    print("### preparación: réplicas sanas y evidencia a cero")
-    panel.fase_en("preparación: réplicas sanas y evidencia a cero")
-    restaurar()
-    vaciar_evidencia()
-    print(f"incidentes iniciales: {_metricas.leer()['total']}")
-
-    print()
-    print(f"### CORRIDA A — línea base (sin fallo), {n_base} cotizaciones")
-    panel.a_en_curso()
-    ruta_a = res / "A-baseline.json"
-    carga("baseline", n_base, ruta_a, "none")
-    panel.registrar_a(json.loads(ruta_a.read_text(encoding="utf-8")))
-
-    print()
-    print(f"### CORRIDA B — detección, {n_modo} cotizaciones por modo")
-    corrida_deteccion(
-        MODOS,
-        n_modo,
-        res,
-        inyectar_fn=inyectar,
-        carga_fn=carga,
-        leer_total=lambda: int(_metricas.leer()["total"]),
-        esperar=esperar_metricas_estables,
-        anotar=anotar_deteccion.anotar,
-        al_empezar=panel.b_en_curso,
-        al_terminar=panel.registrar_b,
+    print("  escenario: legítimo inusual ASR-31…")
+    resultado_legitimo_31 = escenarios.legitimo_inusual_asr31(
+        cliente, LEGITIMO_INUSUAL_ASR31, POLIZA_CENTRO_INUSUAL, periodo
     )
-    restaurar()
+    print(
+        f"    consulta_1={resultado_legitimo_31.estado_consulta_1} "
+        f"consulta_2={resultado_legitimo_31.estado_consulta_2}"
+    )
 
-    print()
-    print("### CORRIDA C — enmascaramiento sostenido con premium_offset en B")
-    panel.c_en_curso()
-    inyectar("b", "premium_offset")
-    ruta_c = res / "C-enmascaramiento.json"
-    carga("enmascaramiento", n_mascara, ruta_c, "premium_offset")
-    panel.registrar_c(json.loads(ruta_c.read_text(encoding="utf-8")))
-    restaurar()
+    print("  Locust: ráfaga ASR-31 concurrente + tráfico habitual…")
+    prefijo = f"p{periodo}-r{repeticion}"
+    ruta_jsonl = directorio / f"{prefijo}-locust.jsonl"
+    filas_locust = _correr_locust(
+        desde_env(), periodo, ruta_jsonl, directorio / f"{prefijo}-locust"
+    )
+    print(f"    {len(filas_locust)} respuestas registradas")
 
-    print()
-    print("### informe")
-    panel.fase_en("informe generado")
-    codigo = reporte.main()
-    if not sin_ui:
-        print(f"Tablero: http://127.0.0.1:{puerto_tablero}  (Enter para salir)")
-        with contextlib.suppress(EOFError):
-            input()
-    return codigo
+    print("  volcando alertas de Reacción (Validación)…")
+    alertas = _volcar_alertas(desde_env())
+    duplicadas = _contar_alertas_duplicadas()
+    print(f"    {len(alertas)} alertas, {duplicadas} duplicadas en logs")
+
+    print("  verificando estados de pólizas como supervisor…")
+    estados_polizas = _verificar_estados_polizas(
+        cliente, [POLIZA_ATACANTE_ASR23, POLIZA_LEGITIMO_ASR23]
+    )
+    print(f"    {estados_polizas}")
+
+    corrida = {
+        "periodo_auditoria_s": periodo,
+        "repeticion": repeticion,
+        "escenarios": {
+            "atacante_asr23": dataclasses.asdict(resultado_atacante_23),
+            "legitimo_asr23": dataclasses.asdict(resultado_legitimo_23),
+            "atacante_asr31_secuencial": dataclasses.asdict(resultado_atacante_31),
+            "legitimo_inusual_asr31": dataclasses.asdict(resultado_legitimo_31),
+        },
+        "locust_filas": filas_locust,
+        "alertas": alertas,
+        "alertas_duplicadas_en_logs": duplicadas,
+        "estados_polizas": estados_polizas,
+    }
+    ruta_corrida = directorio / f"{prefijo}.json"
+    ruta_corrida.write_text(json.dumps(corrida, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parsear_args(argv)
+    periodos = [int(p) for p in args.periodos.split(",") if p.strip()]
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    directorio = DIRECTORIO_RESULTADOS / timestamp
+    directorio.mkdir(parents=True, exist_ok=True)
+
+    for periodo in periodos:
+        for repeticion in range(1, args.repeticiones + 1):
+            print(f"=== periodo={periodo}s repeticion={repeticion}/{args.repeticiones} ===")
+            if not args.sin_reinicio:
+                print("  reiniciando el stack…")
+                _reiniciar(periodo)
+            cliente = ClienteExperimento(desde_env())
+            _correr_repeticion(cliente, periodo, repeticion, directorio)
+
+    print("capturando versiones de imágenes…")
+    meta = {
+        "fecha": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "periodos": periodos,
+        "repeticiones": args.repeticiones,
+        "imagenes": _imagenes_docker(),
+    }
+    (directorio / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    print("generando informe…")
+    ruta_informe = reporte.escribir_informe(directorio)
+    print(f"informe escrito en {ruta_informe}")
+    print(f"evidencia guardada en {directorio}")
+    return 0
 
 
 if __name__ == "__main__":

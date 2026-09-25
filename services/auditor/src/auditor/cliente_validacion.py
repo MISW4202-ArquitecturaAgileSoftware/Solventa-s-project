@@ -1,80 +1,73 @@
 """Cliente HTTP de Validación (`urllib` de la biblioteca estándar).
 
-Solo llama a `POST /v1/anomalias`. Distingue dos clases de fallo, porque de
-eso depende si el evento de auditoría se confirma o se reintenta:
-
-- TRANSITORIO (red caída, timeout, 5xx, respuesta ilegible): reintentar puede
-  funcionar. El evento queda pendiente y vuelve en el ciclo siguiente (§5.4).
-- DEFINITIVO (404 empleado desconocido, 422 cuerpo rechazado): reintentar
-  nunca lo arreglará. El evento se confirma y queda registrado en el log.
+Un worker no necesita `requests`: es un único POST con timeout y sin reintentos
+en línea. El reintento lo hace el ciclo siguiente, al no hacer `XACK` ante un
+fallo transitorio (ver `ciclo.py`).
 """
 
 import json
+import logging
 import urllib.error
 import urllib.request
-from typing import Any, Protocol
+from typing import Protocol
 
 from auditor.config import Config
-from auditor.contracts import CuerpoAnomalia, Decision
+from auditor.contracts import CuerpoAnomalia, Decision, EventoAuditoria, RespuestaAnomalia
 
-_DEFINITIVOS = frozenset({404, 422})
+log = logging.getLogger(__name__)
 
-
-class ErrorValidacionRemota(Exception):
-    def __init__(self, mensaje: str, *, definitivo: bool) -> None:
-        super().__init__(mensaje)
-        self.definitivo = definitivo
+_RUTA_ANOMALIAS = "/v1/anomalias"
 
 
-class ClienteValidacion(Protocol):
-    def informar_anomalia(self, cuerpo: CuerpoAnomalia) -> Decision: ...
+class ErrorValidacionTransitoria(Exception):
+    """Fallo de red, timeout o 5xx: se asume recuperable en el ciclo siguiente."""
 
 
-class ClienteValidacionHttp:
-    RUTA = "/v1/anomalias"
+class ProtocoloValidacion(Protocol):
+    def informar_anomalia(self, evento: EventoAuditoria) -> Decision: ...
 
+
+class ClienteValidacion:
     def __init__(self, config: Config) -> None:
-        self._url = config.url_validacion.rstrip("/") + self.RUTA
-        self._timeout_s = config.timeout_http_ms / 1000
+        self._config = config
 
-    def informar_anomalia(self, cuerpo: CuerpoAnomalia) -> Decision:
+    def informar_anomalia(self, evento: EventoAuditoria) -> Decision:
+        if evento.recurso.region is None:
+            raise ValueError("un evento sin región no se informa a Validación")
+
+        cuerpo = CuerpoAnomalia(
+            evento_id=evento.evento_id,
+            correlation_id=evento.correlation_id,
+            employee_id=evento.actor.employee_id,
+            session_id=evento.actor.session_id,
+            accion=evento.accion,
+            region_consultada=evento.recurso.region,
+        )
         peticion = urllib.request.Request(
-            self._url,
+            self._config.url_validacion + _RUTA_ANOMALIAS,
             data=json.dumps(cuerpo.a_dict(), ensure_ascii=False).encode("utf-8"),
-            method="POST",
             headers={
                 "Content-Type": "application/json",
-                "X-Correlation-Id": cuerpo.correlation_id,
+                "X-Correlation-Id": evento.correlation_id,
             },
+            method="POST",
         )
         try:
-            with urllib.request.urlopen(peticion, timeout=self._timeout_s) as respuesta:
+            with urllib.request.urlopen(
+                peticion, timeout=self._config.timeout_http_ms / 1000
+            ) as respuesta:
                 if respuesta.status != 202:
-                    raise ErrorValidacionRemota(
-                        f"{self.RUTA} respondió {respuesta.status}, se esperaba 202",
-                        definitivo=False,
-                    )
-                datos = json.loads(respuesta.read())
+                    raise ErrorValidacionTransitoria(f"estado inesperado {respuesta.status}")
+                crudo = json.loads(respuesta.read())
         except urllib.error.HTTPError as err:
-            raise ErrorValidacionRemota(
-                f"{self.RUTA} respondió {err.code}", definitivo=err.code in _DEFINITIVOS
-            ) from err
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as err:
-            raise ErrorValidacionRemota(
-                f"fallo de red hacia {self.RUTA}: {err}", definitivo=False
-            ) from err
-        return _decision(datos, cuerpo.evento_id)
+            if err.code == 404:
+                log.warning(
+                    "empleado desconocido para Validación",
+                    extra={"employee_id": evento.actor.employee_id},
+                )
+                return Decision.IGNORAR
+            raise ErrorValidacionTransitoria(f"estado {err.code}") from err
+        except (urllib.error.URLError, TimeoutError) as err:
+            raise ErrorValidacionTransitoria(str(err)) from err
 
-
-def _decision(datos: Any, evento_id: str) -> Decision:
-    if not isinstance(datos, dict):
-        raise ErrorValidacionRemota("la respuesta no es un objeto JSON", definitivo=False)
-    if datos.get("evento_id") != evento_id:
-        raise ErrorValidacionRemota(
-            f"la respuesta es de otro evento: {datos.get('evento_id')!r}", definitivo=False
-        )
-    crudo = datos.get("decision")
-    try:
-        return Decision(str(crudo))
-    except ValueError as err:
-        raise ErrorValidacionRemota(f"decisión desconocida: {crudo!r}", definitivo=False) from err
+        return RespuestaAnomalia.desde_dict(crudo).decision

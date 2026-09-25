@@ -1,246 +1,149 @@
-"""Usuario Locust del experimento: horario pico contra el API Gateway.
+"""Carga concurrente del experimento (PLAN-IMPLEMENTACION.md §6, F9): la parte
+que AAS-H710 exige demostrar bajo concurrencia real, no solo en los escenarios
+secuenciales de un único actor de `escenarios.py`.
 
-Diez usuarios con `constant_pacing(1.2)` producen 500 cotizaciones/min, el
-ritmo que fija ASR-11. El primer disparo se desfasa entre usuarios para no
-salir en ráfaga: sin eso, N pequeñas medirían el hatch y no el pico.
-
-Cualquier respuesta HTTP cuenta como estímulo entregado. Una prima distinta
-del oráculo se marca como fallo de Locust: esa es la métrica de ASR-12.
-Solo una excepción de red o un cuerpo 200 ilegible se tratan igual.
-
-`LOCUST_N` acota la corrida. `LOCUST_SALIDA` escribe el JSON que consume
-`reporte.py`. `LOCUST_MODO` alimenta `prediccion.py`: `fallos_efectivos` solo
-cuenta requests que llegaron a Votación y en las que el modo sí inyecta un
-error observable.
+Se ejecuta headless desde `correr.py`, sin interfaz. Cada respuesta de
+`AtacanteRafagaASR31` se anota en el JSONL de `RESULTADOS_JSONL`, que
+`metricas.py` interpreta después para calcular la ventana de exposición.
 """
 
+from __future__ import annotations
+
+import itertools
 import json
 import os
-from dataclasses import dataclass
-from datetime import UTC, date, datetime
-from decimal import Decimal, InvalidOperation
-from itertools import count
+import threading
+import time
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
-import gevent
-from locust import HttpUser, constant_pacing, events, task
-from locust.env import Environment
+from locust import HttpUser, between, constant, task
+from locust.exception import StopUser
 
-from locust_carga.metricas_run import MetricasCorrida
-from locust_carga.oraculo import prima_esperada
-from locust_carga.prediccion import es_fallo_efectivo
-from locust_carga.solicitudes import solicitud_de
+from entorno import (
+    PASSWORD,
+    POLIZA_NORTE_HABITUAL,
+    POLIZAS_SUR_RAFAGA,
+    POOL_HABITUAL,
+    POOL_RAFAGA_ASR31,
+    Empleado,
+)
 
-#: 10 usuarios * 1 request / 1.2 s = 8.33 RPS = 500/min.
-PACING_S = 1.2
-USUARIOS_PICO = 10
-TIMEOUT_S = 5.0
+_RUTA_JSONL = Path(os.environ.get("RESULTADOS_JSONL", "/tmp/resultados-locust.jsonl"))
+_CANDADO_JSONL = threading.Lock()
 
+_RAIZ = Path(__file__).resolve().parents[2]
+_COTIZACION: dict[str, Any] = json.loads(
+    (_RAIZ / "docs" / "ejemplos" / "cotizacion.json").read_text(encoding="utf-8")
+)
 
-@dataclass
-class _Estado:
-    hoy: date
-    indices: count[int]
-    slots: count[int]
-    reservadas: int
-    limite: int | None
-    lock: Lock
-    cerrada: bool
-    metricas: MetricasCorrida
+_CICLO_RAFAGA = itertools.cycle(POOL_RAFAGA_ASR31)
+_CICLO_HABITUAL = itertools.cycle(POOL_HABITUAL)
+_CICLO_POLIZAS_SUR = itertools.cycle(POLIZAS_SUR_RAFAGA)
 
 
-_estado: _Estado | None = None
-
-
-def _estado_actual() -> _Estado:
-    if _estado is None:
-        raise RuntimeError("Locust aún no disparó test_start")
-    return _estado
-
-
-def _iniciar(environment: Environment, **kwargs: object) -> None:
-    # Locust dispara el hook con handler(**kwargs); el nombre del argumento
-    # tiene que ser exactamente `environment`.
-    del environment, kwargs
-    global _estado
-    crudo = os.environ.get("LOCUST_N")
-    _estado = _Estado(
-        hoy=datetime.now(tz=UTC).date(),
-        indices=count(),
-        slots=count(),
-        reservadas=0,
-        limite=int(crudo) if crudo else None,
-        lock=Lock(),
-        cerrada=False,
-        metricas=MetricasCorrida(
-            etiqueta=os.environ.get("LOCUST_ETIQUETA", ""),
-            modo=os.environ.get("LOCUST_MODO", "none"),
-        ),
+def _registrar(usuario: str, t: float, estado: int, tipo: str | None) -> None:
+    linea = json.dumps(
+        {"usuario": usuario, "t": t, "estado": estado, "tipo": tipo}, ensure_ascii=False
     )
+    with _CANDADO_JSONL, _RUTA_JSONL.open("a", encoding="utf-8") as archivo:
+        archivo.write(linea + "\n")
 
 
-def _escribir_resumen() -> None:
-    """JSON que desbloquea a correr.py. Idempotente: se puede llamar al llegar
-    a N y otra vez en test_stop (SIGTERM) con las in-flight que alcanzaron."""
-    if _estado is None:
-        return
-    resumen = _estado.metricas.resumen()
-    print(
-        json.dumps(resumen["latencia_ms"] | {"erroneas": resumen["primas_erroneas"]}),
-        flush=True,
-    )
-    salida = os.environ.get("LOCUST_SALIDA")
-    if not salida:
-        return
-    ruta = Path(salida)
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    ruta.write_text(json.dumps(resumen, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _detener(environment: Environment, **kwargs: object) -> None:
-    del environment, kwargs
-    _escribir_resumen()
-
-
-events.test_start.add_listener(_iniciar)  # type: ignore[no-untyped-call]
-events.test_stop.add_listener(_detener)  # type: ignore[no-untyped-call]
-
-
-def _reservar() -> int | None:
-    """Índice de la próxima solicitud, o None si ya se alcanzó LOCUST_N."""
-    estado = _estado_actual()
-    with estado.lock:
-        if estado.limite is not None and estado.reservadas >= estado.limite:
-            return None
-        estado.reservadas += 1
-        return next(estado.indices)
-
-
-def _cerrar(environment: Environment) -> None:
-    """Cierra el bloque al llegar a N, fuera del greenlet del usuario.
-
-    Con UI no se llama `runner.stop()`: eso pone Users=0 y parece un crash.
-    Los usuarios siguen vivos y `cotizar` retorna sin POST. El JSON se escribe
-    ya, para que correr.py no dependa de test_stop. Headless sí hace quit().
-    """
-    _escribir_resumen()
-    runner = environment.runner
-    if runner is None:
-        return
-    if environment.web_ui is not None:
-        print(
-            f"bloque completo ({_estado.metricas.enviadas if _estado else '?'} cotizaciones). "
-            "Usuarios en espera; Enter en la terminal para el siguiente modo.",
-            flush=True,
-        )
-        return
-    runner.quit()
-
-
-def _cuerpo_json(respuesta: Any) -> dict[str, Any] | None:
-    try:
-        parsed = respuesta.json()
-    except TypeError, ValueError, json.JSONDecodeError:
+def _tipo_error(cuerpo: Any) -> str | None:
+    if not isinstance(cuerpo, dict):
         return None
-    return parsed if isinstance(parsed, dict) else None
+    tipo = cuerpo.get("type")
+    if not isinstance(tipo, str) or not tipo:
+        return None
+    return tipo.rstrip("/").rsplit("/", 1)[-1]
 
 
-def _fecha_calculo(cuerpo: dict[str, Any] | None, respaldo: date) -> date:
-    if cuerpo is None:
-        return respaldo
-    crudo = cuerpo.get("emitido_en")
-    if not isinstance(crudo, str):
-        return respaldo
-    try:
-        return datetime.fromisoformat(crudo.replace("Z", "+00:00")).date()
-    except ValueError:
-        return respaldo
+def _iniciar_sesion(usuario: HttpUser, empleado: Empleado) -> str | None:
+    respuesta = usuario.client.post(
+        "/v1/sesiones",
+        json={"usuario": empleado.usuario, "password": PASSWORD},
+        name="/v1/sesiones",
+    )
+    if respuesta.status_code != 201:
+        return None
+    token: str = respuesta.json()["token"]
+    return token
 
 
-def _latencia_ms(respuesta: Any) -> float:
-    meta = getattr(respuesta, "request_meta", None)
-    if not isinstance(meta, dict):
-        return 0.0
-    crudo = meta.get("response_time", 0.0)
-    try:
-        return float(crudo)
-    except TypeError, ValueError:
-        return 0.0
+class AtacanteRafagaASR31(HttpUser):
+    """Cinco atacantes concurrentes (`E-ASN-04`..`08`) consultando pólizas de
+    `sur`, fuera de su alcance `[norte]`, a ritmo constante hasta que
+    Reacción los revoca."""
 
+    wait_time = constant(0.1)
+    fixed_count = 5
 
-class CotizadorUser(HttpUser):
-    wait_time = constant_pacing(PACING_S)
+    _empleado: Empleado
+    _token: str
+    _inicio: float
 
     def on_start(self) -> None:
-        # Desfasa el primer POST: usuario i espera i * 0.12 s. El POST no va
-        # aquí; si fuera, L1 mediría una ráfaga y no el pacing.
-        slot = next(_estado_actual().slots) % USUARIOS_PICO
-        gevent.sleep(slot * (PACING_S / USUARIOS_PICO))
+        self._empleado = next(_CICLO_RAFAGA)
+        token = _iniciar_sesion(self, self._empleado)
+        if token is None:
+            raise StopUser
+        self._token = token
+        self._inicio = time.perf_counter()
 
     @task
-    def cotizar(self) -> None:
-        indice = _reservar()
-        if indice is None:
-            estado = _estado_actual()
-            with estado.lock:
-                ya_cerrada = estado.cerrada
-                estado.cerrada = True
-            if not ya_cerrada:
-                gevent.spawn(_cerrar, self.environment)
-            return
-
-        estado = _estado_actual()
-        solicitud = solicitud_de(indice, estado.hoy)
-        estado_http = 0
-        latencia_ms = 0.0
-        estado_cotizacion: str | None = None
-        prima_entregada: str | None = None
-        prima_oraculo: str | None = None
-        erronea = False
-        cuerpo: dict[str, Any] | None = None
-
-        with self.client.post(
-            "/v1/cotizaciones",
-            json=solicitud,
-            name="cotizar",
+    def consultar_sur(self) -> None:
+        poliza_id = next(_CICLO_POLIZAS_SUR)
+        with self.client.get(
+            f"/v1/polizas/{poliza_id}",
+            headers={"Authorization": f"Bearer {self._token}"},
+            name="/v1/polizas/[sur]",
             catch_response=True,
-            timeout=TIMEOUT_S,
         ) as respuesta:
-            estado_http = int(respuesta.status_code or 0)
-            latencia_ms = _latencia_ms(respuesta)
-            cuerpo = _cuerpo_json(respuesta) if estado_http else None
-            if cuerpo is not None:
-                crudo_estado = cuerpo.get("estado")
-                if isinstance(crudo_estado, str):
-                    estado_cotizacion = crudo_estado
+            # El 401 que revoca al atacante es el resultado esperado de la
+            # medición, no un fallo de Locust: si se dejara como "failure",
+            # `locust --headless` saldría con código de error y tumbaría la
+            # corrida entera por el éxito de la detección.
+            respuesta.success()
+            transcurrido = time.perf_counter() - self._inicio
+            cuerpo = respuesta.json() if respuesta.content else None
+            _registrar(
+                self._empleado.usuario, transcurrido, respuesta.status_code, _tipo_error(cuerpo)
+            )
+        if respuesta.status_code == 401:
+            raise StopUser
 
-            if estado_http == 200 and cuerpo is not None:
-                try:
-                    esperada = prima_esperada(cuerpo, solicitud)
-                    entregada = Decimal(cuerpo["cotizacion"]["prima_mensual"])
-                except KeyError, TypeError, ValueError, InvalidOperation:
-                    respuesta.failure("cuerpo sin prima verificable")
-                else:
-                    prima_oraculo = str(esperada)
-                    prima_entregada = str(entregada)
-                    erronea = entregada != esperada
-                    if erronea:
-                        respuesta.failure("prima erronea")
-                    else:
-                        respuesta.success()
-            elif estado_http:
-                respuesta.success()
 
-        fecha = _fecha_calculo(cuerpo, estado.hoy)
-        estado.metricas.registrar(
-            indice=indice,
-            estado_http=estado_http,
-            latencia_ms=latencia_ms,
-            estado_cotizacion=estado_cotizacion,
-            prima_entregada=prima_entregada,
-            prima_esperada=prima_oraculo,
-            erronea=erronea,
-            fallo_efectivo=es_fallo_efectivo(solicitud, estado.metricas.modo, fecha),
+class Habitual(HttpUser):
+    """Tráfico de fondo (`E-ASN-09/10`, `supervisor.01`): consultas de la
+    propia región y cotizaciones, ninguna fuera de alcance."""
+
+    wait_time = between(0.5, 1.5)
+    fixed_count = 3
+
+    _empleado: Empleado
+    _token: str
+
+    def on_start(self) -> None:
+        self._empleado = next(_CICLO_HABITUAL)
+        token = _iniciar_sesion(self, self._empleado)
+        if token is None:
+            raise StopUser
+        self._token = token
+
+    @task(2)
+    def consultar_norte(self) -> None:
+        self.client.get(
+            f"/v1/polizas/{POLIZA_NORTE_HABITUAL}",
+            headers={"Authorization": f"Bearer {self._token}"},
+            name="/v1/polizas/[norte]",
+        )
+
+    @task(1)
+    def cotizar(self) -> None:
+        self.client.post(
+            "/v1/cotizaciones",
+            json=_COTIZACION,
+            headers={"Authorization": f"Bearer {self._token}"},
+            name="/v1/cotizaciones",
         )

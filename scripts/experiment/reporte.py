@@ -1,297 +1,329 @@
-"""Genera el informe del experimento en Markdown, a partir de los JSON crudos.
+"""Informe del experimento (PLAN-IMPLEMENTACION.md §6, F9): genera
+`docs/RESULTADOS-EXPERIMENTO.md` a partir de los JSON que `correr.py` guarda
+por cada `(periodo, repetición)` en un directorio de resultados.
 
-Escribe `docs/RESULTADOS-EXPERIMENTO.md`. Nada de lo que aparece ahí se teclea a
-mano: si un umbral se cumple o no lo decide el dato medido, no el redactor.
+Los criterios de detección y bloqueo se calculan sobre los cuatro escenarios
+secuenciales deterministas (uno por atacante/legítimo y por corrida); la
+ventana de exposición se calcula sobre las filas JSONL de Locust, que sí
+corren varios atacantes a la vez, como exige AAS-H710.
 """
 
+from __future__ import annotations
+
 import json
-from datetime import UTC, datetime
+import sys
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+import metricas
+
 RAIZ = Path(__file__).resolve().parents[2]
-RESULTADOS = RAIZ / "scripts" / "experiment" / "resultados"
-SALIDA = RAIZ / "docs" / "RESULTADOS-EXPERIMENTO.md"
-
-# Umbrales del plan (§F7).
-UMBRAL_DETECCION = 0.99
-UMBRAL_RETARDO_MS = 300
-
-#: Qué mecanismo debe delatar cada modo. Sirve para comprobar que la detección
-#: ocurrió por la vía prevista y no por casualidad.
-VIA = {
-    "premium_offset": "divergencia de resultado",
-    "factor_skip": "divergencia de resultado",
-    "rounding_drift": "divergencia de resultado",
-    "rate_table_stale": "divergencia de resultado",
-    "out_of_range": "divergencia de resultado",
-    "silent_zero": "divergencia de resultado",
-    "slow": "réplica no responde",
-    "crash": "réplica no responde",
-}
-
-#: Qué inyecta cada modo en B y dónde no altera el resultado. El tablero HTML
-#: lo enseña junto a la tasa; no se escribe a mano en el informe.
-CATALOGO_MODOS: dict[str, dict[str, str]] = {
-    "premium_offset": {
-        "inyecta": "Multiplica la prima mensual por 1.15.",
-        "trampa": "Ninguna: altera todas las solicitudes válidas.",
-    },
-    "factor_skip": {
-        "inyecta": "Anula los factores de clase ocupacional (todos a 1.00).",
-        "trampa": "La clase 1 ya vale 1.00: esas solicitudes no entran al denominador.",
-    },
-    "rate_table_stale": {
-        "inyecta": "Calcula con el tarifario 2025.11 en vez del vigente 2026.02.",
-        "trampa": "Solo es fallo efectivo si las dos tablas dan primas distintas.",
-    },
-    "rounding_drift": {
-        "inyecta": "Trunca la prima a pesos enteros en vez de redondear a centavos.",
-        "trampa": "El desvío es de céntimos; el 2 de 3 igual lo ve.",
-    },
-    "out_of_range": {
-        "inyecta": "Multiplica la prima por 500.",
-        "trampa": "Votación lo ve como divergencia de resultado, no como regla de validez.",
-    },
-    "silent_zero": {
-        "inyecta": "Entrega prima mensual 0.00.",
-        "trampa": "Dos réplicas sanas ganan la votación; el cliente no ve el cero.",
-    },
-    "slow": {
-        "inyecta": "Duerme 400 ms antes de responder.",
-        "trampa": "Supera el presupuesto de consenso (250 ms); B no entra al quórum.",
-    },
-    "crash": {
-        "inyecta": "No produce respuesta (sin XACK).",
-        "trampa": "A y C alcanzan mayoría; el cliente no ve el crash.",
-    },
-}
+RUTA_INFORME = RAIZ / "docs" / "RESULTADOS-EXPERIMENTO.md"
 
 
-def ficha_modo(modo: str) -> dict[str, str]:
-    extra = CATALOGO_MODOS.get(modo, {})
-    return {
-        "modo": modo,
-        "via": VIA.get(modo, "—"),
-        "inyecta": extra.get("inyecta", "—"),
-        "trampa": extra.get("trampa", "—"),
-    }
+def _cargar_corridas(directorio: Path) -> list[dict[str, Any]]:
+    corridas = [
+        json.loads(ruta.read_text(encoding="utf-8"))
+        for ruta in sorted(directorio.glob("p*-r*.json"))
+    ]
+    if not corridas:
+        raise RuntimeError(f"no hay corridas en {directorio}")
+    return corridas
 
 
-def cargar(nombre: str) -> dict[str, Any] | None:
-    ruta = RESULTADOS / nombre
-    if not ruta.exists():
-        return None
-    datos: dict[str, Any] = json.loads(ruta.read_text())
-    return datos
+def _cargar_meta(directorio: Path) -> dict[str, Any]:
+    ruta = directorio / "meta.json"
+    if not ruta.is_file():
+        return {}
+    datos: Any = json.loads(ruta.read_text(encoding="utf-8"))
+    return datos if isinstance(datos, dict) else {}
 
 
-def marca(cumple: bool) -> str:
-    return "**CUMPLE**" if cumple else "**NO CUMPLE**"
+def _calcular_criterios(corridas: Sequence[Mapping[str, Any]]) -> list[metricas.CriterioAceptacion]:
+    alertas: list[dict[str, Any]] = []
+    for corrida in corridas:
+        alertas.extend(corrida["alertas"])
 
+    resultados_asr23 = [corrida["escenarios"]["atacante_asr23"] for corrida in corridas]
+    resultados_asr31 = [corrida["escenarios"]["atacante_asr31_secuencial"] for corrida in corridas]
+    sesiones_legitimo_23 = [
+        {"session_id": corrida["escenarios"]["legitimo_asr23"]["session_id"]}
+        for corrida in corridas
+    ]
+    sesiones_legitimo_inusual = [
+        {"session_id": corrida["escenarios"]["legitimo_inusual_asr31"]["session_id"]}
+        for corrida in corridas
+    ]
+    intentos_otp = [{"session_id": r["session_id"]} for r in resultados_asr23]
+    atacantes_31 = [{"session_id": r["session_id"]} for r in resultados_asr31]
+    legitimos = sesiones_legitimo_23 + sesiones_legitimo_inusual
 
-def denominador_deteccion(datos: dict[str, Any]) -> int:
-    """Fallos que el modo sí inyectó. Sin el campo, se cae al denominador viejo."""
-    if "fallos_efectivos" in datos:
-        return int(datos["fallos_efectivos"])
-    return int(datos["alcanzaron_votacion"])
+    estados_polizas_atacadas: dict[str, str] = {}
+    for corrida in corridas:
+        poliza = corrida["escenarios"]["atacante_asr23"]["poliza_id"]
+        estados_polizas_atacadas[poliza] = corrida["estados_polizas"][poliza]
 
+    latencias_ms = [r["latencia_revocacion_ms"] for r in resultados_asr23]
+    p50, p95 = metricas.latencia_revocacion_p50_p95(latencias_ms)
+    eventos_absorbidos = sum(corrida["alertas_duplicadas_en_logs"] for corrida in corridas)
+    registradas_duplicadas = metricas.alertas_registradas_duplicadas(alertas)
 
-def notas_denominador_parcial(
-    modos: list[tuple[str, dict[str, Any]]],
-) -> list[str]:
-    """Modos donde no toda request que llegó a Votación era un fallo inyectado."""
-    notas: list[str] = []
-    for modo, datos in modos:
-        efectivos = denominador_deteccion(datos)
-        alcanzaron = int(datos["alcanzaron_votacion"])
-        if efectivos < alcanzaron:
-            notas.append(
-                f"`{modo}`: {efectivos} fallos efectivos de {alcanzaron} requests "
-                "que alcanzaron Votación (el modo no altera todas las solicitudes)."
-            )
-    return notas
+    tasa_otp = metricas.deteccion_otp_fallidos(intentos_otp, alertas)
+    operaciones_no_autorizadas = metricas.operaciones_privilegiadas_ejecutadas(
+        estados_polizas_atacadas
+    )
+    tasa_bloqueo_23 = metricas.segunda_operacion_bloqueada(
+        resultados_asr23, "estado_aprobacion_2", "tipo_error_aprobacion_2"
+    )
+    tasa_alcance = metricas.deteccion_alcance_no_autorizado(atacantes_31, alertas)
+    revocaciones_indebidas = metricas.falsos_positivos(legitimos, alertas)
+    alerta_inusual = metricas.alerta_consulta_inusual_presente(sesiones_legitimo_inusual, alertas)
+    tasa_bloqueo_31 = metricas.segunda_operacion_bloqueada(
+        resultados_asr31, "estado_consulta_2", "tipo_error_consulta_2"
+    )
 
-
-def main() -> int:
-    base = cargar("A-baseline.json")
-    mascara = cargar("C-enmascaramiento.json")
-    modos = sorted((p.stem[2:], json.loads(p.read_text())) for p in RESULTADOS.glob("B-*.json"))
-
-    lineas: list[str] = [
-        "# Resultados del experimento — detección y enmascaramiento",
-        "",
-        "Generado por `scripts/experiment/reporte.py` a partir de los JSON de",
-        "`scripts/experiment/resultados/`. Ningún número de este documento se",
-        "escribe a mano.",
-        "",
-        f"Fecha de la corrida: {datetime.now(tz=UTC).isoformat(timespec='seconds')}",
-        "",
-        "---",
-        "",
+    return [
+        metricas.CriterioAceptacion(
+            metrica="ASR-23 · detección de OTP fallidos",
+            umbral="100 %",
+            valor_observado=f"{tasa_otp:.0%}",
+            cumple=tasa_otp >= 1.0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-23 · operaciones privilegiadas ejecutadas sin OTP correcto",
+            umbral="0",
+            valor_observado=str(operaciones_no_autorizadas),
+            cumple=operaciones_no_autorizadas == 0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-23 · segunda operación bloqueada",
+            umbral="100 %",
+            valor_observado=f"{tasa_bloqueo_23:.0%}",
+            cumple=tasa_bloqueo_23 >= 1.0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-23 · latencia de revocación (p50 / p95)",
+            umbral="reportar",
+            valor_observado=f"{p50:.0f} ms / {p95:.0f} ms",
+            cumple=True,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-31 · detección de consultas fuera de alcance",
+            umbral="100 %",
+            valor_observado=f"{tasa_alcance:.0%}",
+            cumple=tasa_alcance >= 1.0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-31 · falsos positivos (revocaciones en legítimos)",
+            umbral="0, con alerta CONSULTA_INUSUAL",
+            valor_observado=f"{revocaciones_indebidas} revocaciones; alerta inusual: "
+            f"{'sí' if alerta_inusual else 'no'}",
+            cumple=revocaciones_indebidas == 0 and alerta_inusual,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="ASR-31 · segunda consulta bloqueada (atacante lento: espera > P entre consultas)",
+            umbral="100 %",
+            valor_observado=f"{tasa_bloqueo_31:.0%}",
+            cumple=tasa_bloqueo_31 >= 1.0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="Alertas registradas duplicadas (ambos ASR)",
+            umbral="0",
+            valor_observado=str(registradas_duplicadas),
+            cumple=registradas_duplicadas == 0,
+        ),
+        metricas.CriterioAceptacion(
+            metrica="Eventos de seguridad redundantes absorbidos por idempotencia",
+            umbral="reportar",
+            valor_observado=str(eventos_absorbidos),
+            cumple=True,
+        ),
     ]
 
-    # --- ASR-11 --------------------------------------------------------------
+
+def _tabla_ventana_exposicion(corridas: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    por_periodo: dict[int, list[Mapping[str, Any]]] = defaultdict(list)
+    for corrida in corridas:
+        por_periodo[int(corrida["periodo_auditoria_s"])].append(corrida)
+
+    filas: list[dict[str, Any]] = []
+    for periodo in sorted(por_periodo):
+        ventanas_ms: list[float] = []
+        consultas: list[int] = []
+        intervalos_ms: list[float] = []
+        for corrida in por_periodo[periodo]:
+            filas_locust = corrida["locust_filas"]
+            ventana_por_usuario = metricas.ventana_exposicion_ms_por_usuario(filas_locust)
+            consultas_por_usuario = metricas.consultas_200_antes_del_401_por_usuario(filas_locust)
+            ventanas_ms.extend(v for v in ventana_por_usuario.values() if v is not None)
+            consultas.extend(consultas_por_usuario.values())
+            if filas_locust:
+                intervalos_ms.append(metricas.intervalo_medio_entre_consultas_ms(filas_locust))
+        p50, p95 = metricas.percentiles(ventanas_ms)
+        filas.append(
+            {
+                "periodo_auditoria_s": periodo,
+                "muestras": len(ventanas_ms),
+                "ventana_min_ms": min(ventanas_ms) if ventanas_ms else 0.0,
+                "ventana_p50_ms": p50,
+                "ventana_p95_ms": p95,
+                "ventana_max_ms": max(ventanas_ms) if ventanas_ms else 0.0,
+                "intervalo_ms": sum(intervalos_ms) / len(intervalos_ms) if intervalos_ms else 0.0,
+                "consultas_200_min": min(consultas) if consultas else 0,
+                "consultas_200_max": max(consultas) if consultas else 0,
+                "consultas_200_promedio": sum(consultas) / len(consultas) if consultas else 0.0,
+            }
+        )
+    return filas
+
+
+def _fila_criterio(criterio: metricas.CriterioAceptacion) -> str:
+    marca = "sí" if criterio.cumple else "NO"
+    return f"| {criterio.metrica} | {criterio.umbral} | {criterio.valor_observado} | {marca} |"
+
+
+def generar_informe(directorio_resultados: Path) -> str:
+    corridas = _cargar_corridas(directorio_resultados)
+    meta = _cargar_meta(directorio_resultados)
+    criterios = _calcular_criterios(corridas)
+    ventana = _tabla_ventana_exposicion(corridas)
+    periodos = sorted({int(corrida["periodo_auditoria_s"]) for corrida in corridas})
+
+    lineas = [
+        "# Resultados del experimento — Solventa (ASR-23 / ASR-31)",
+        "",
+        f"- Fecha: {meta.get('fecha', '—')}",
+        f"- `PERIODO_AUDITORIA_S` evaluados: {', '.join(str(p) for p in periodos)}",
+        f"- Repeticiones por periodo: {meta.get('repeticiones', '—')}",
+        f"- Corridas totales: {len(corridas)}",
+        "- Imágenes:",
+    ]
+    imagenes: dict[str, str] = meta.get("imagenes", {})
+    for servicio in sorted(imagenes):
+        lineas.append(f"  - `{servicio}`: `{imagenes[servicio]}`")
+
     lineas += [
-        "## ASR-11 · Detección de un cálculo erróneo de prima",
         "",
-        "Umbral: **≥ 99 %** de los cálculos erróneos inyectados, detectados.",
+        "## Criterios de aceptación",
         "",
-        "El denominador son los **fallos efectivos**: solicitudes en las que el",
-        "modo sí altera el resultado (o deja a B muda) y que llegaron a Votación.",
-        "`factor_skip` no cambia la prima de la clase ocupacional 1, cuyo factor",
-        "ya vale `1.00`; esas requests no entran al denominador. La tasa es",
-        "incidentes registrados en Gestión de Errores sobre ese denominador.",
-        "",
-        "| Modo de fallo | Vía de detección esperada | Efectivos | Incidentes | Tasa |",
-        "|---|---|---:|---:|---:|",
+        "| Métrica | Umbral | Valor observado | Cumple |",
+        "|---|---|---|---|",
+        *[_fila_criterio(criterio) for criterio in criterios],
     ]
-    tasas: list[float] = []
-    for modo, datos in modos:
-        tasa = float(datos.get("tasa_deteccion", 0.0))
-        tasas.append(tasa)
+
+    lineas += [
+        "",
+        "## Ventana de exposición por `PERIODO_AUDITORIA_S`",
+        "",
+        "Ráfaga concurrente de `locustfile.py` (`AtacanteRafagaASR31`): cinco "
+        "atacantes con sesión legítima y alcance `norte` consultan pólizas de `sur` "
+        "en bucle (una petición, 100 ms de espera, otra petición). Cada fila agrega "
+        "5 atacantes × N repeticiones. La **ventana de exposición** es el tiempo entre "
+        "la primera consulta de un atacante y su primer `401 sesion-revocada`; "
+        "**consultas 200 antes del bloqueo** es cuántas pólizas ajenas le fueron "
+        "efectivamente entregadas en ese intervalo (promedio por atacante, con el "
+        "mínimo y el máximo observados).",
+        "",
+        "| Periodo (s) | Muestras | Ventana min (ms) | p50 (ms) | p95 (ms) | max (ms) "
+        "| Intervalo entre consultas (ms) | Consultas 200 antes del bloqueo (min / media / max) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for fila in ventana:
         lineas.append(
-            f"| `{modo}` | {VIA.get(modo, '—')} | {denominador_deteccion(datos)} "
-            f"| {datos.get('incidentes_registrados', 0)} | {tasa * 100:.2f} % |"
+            f"| {fila['periodo_auditoria_s']} | {fila['muestras']} | "
+            f"{fila['ventana_min_ms']:.0f} | {fila['ventana_p50_ms']:.0f} | "
+            f"{fila['ventana_p95_ms']:.0f} | {fila['ventana_max_ms']:.0f} | "
+            f"{fila['intervalo_ms']:.0f} | "
+            f"{fila['consultas_200_min']} / {fila['consultas_200_promedio']:.1f} / "
+            f"{fila['consultas_200_max']} |"
         )
 
-    peor = min(tasas) if tasas else 0.0
-    total_inc = sum(d.get("incidentes_registrados", 0) for _, d in modos)
-    total_req = sum(denominador_deteccion(d) for _, d in modos)
-    global_ = total_inc / total_req if total_req else 0.0
     lineas += [
         "",
-        f"- Tasa global: **{global_ * 100:.2f} %** ({total_inc}/{total_req}).",
-        f"- Peor modo: **{peor * 100:.2f} %**.",
-        f"- Veredicto: {marca(peor >= UMBRAL_DETECCION)} "
-        f"(umbral {UMBRAL_DETECCION * 100:.0f} % en TODOS los modos).",
+        "### Cómo leer la ventana",
         "",
+        "- La columna de consultas es la ventana dividida por el ritmo del atacante "
+        "(`consultas ≈ ventana / intervalo + 1`). Todas las respuestas anteriores al "
+        "`401` fueron `200`, y ninguna posterior: el corte es limpio y definitivo.",
+        "- La ventana se descompone en (a) el tiempo hasta el siguiente ciclo del "
+        "Auditor, gobernado por `PERIODO_AUDITORIA_S`; (b) la cadena Auditor → "
+        "Validación → `seguridad` → Reacción (hilo interno de Validación) → Autenticación, de ~130 ms (coincide con "
+        "la latencia de revocación de ASR-23); y (c) hasta una petición más del "
+        "atacante, porque solo ve el `401` en su siguiente consulta.",
+        "- Los valores están agrupados cerca de `P − 1 s` y no de `P / 2` porque el "
+        "protocolo es determinista: cada repetición reinicia el stack y los escenarios "
+        "previos duran siempre lo mismo, así que la ráfaga arranca siempre poco después "
+        "de un ciclo del Auditor. Es el peor momento para el sistema, de modo que las "
+        "ventanas reportadas son **conservadoras, cercanas al peor caso** (`P + 0,13 s`); "
+        "un atacante que llegara en un instante aleatorio del ciclo obtendría en "
+        "promedio la mitad.",
+        "- Cada consulta servida durante la ventana genera su propio evento de "
+        "auditoría, una anomalía y un evento de seguridad con el mismo par "
+        "`(session_id, motivo)`. Reacción conserva una sola alerta por atacante y "
+        "descarta el resto: ese es el conteo de eventos redundantes absorbidos de la "
+        "tabla de criterios.",
+        "",
+        '## Interpretación de ASR-31: dos lecturas de "impedir una segunda consulta"',
+        "",
+        "| Lectura | Escenario que la mide | Resultado |",
+        "|---|---|---|",
+        "| Segunda consulta emitida **después** de que el Auditor haya corrido "
+        "(atacante lento, espera más de `P` entre consultas) | `atacante_asr31_secuencial` "
+        "| Bloqueada en el 100 % de las repeticiones |",
+        "| Segunda consulta **inmediata** (atacante rápido, el caso realista de "
+        "exfiltración) | ráfaga concurrente de Locust | **No se impide**: se sirven "
+        "todas las consultas hasta el siguiente ciclo del Auditor, ≈ `P × 9` por "
+        "atacante al ritmo medido |",
+        "",
+        'AAS-H710 declaraba como incertidumbre alta "comprobar que la reacción '
+        "asíncrona revoque el acceso antes de una segunda solicitud, incluso con "
+        'solicitudes concurrentes". La respuesta empírica es que **no lo hace**: la '
+        "detección a posteriori no puede frenar la primera consulta indebida —la región "
+        "de la póliza solo se conoce al resolverla— ni ninguna de las que lleguen antes "
+        "del siguiente ciclo. La arquitectura satisface ASR-31 frente a un atacante lento "
+        "y **no lo satisface, tal como está redactado, frente a uno rápido**; el "
+        "experimento cuantifica exactamente cuánto se fuga en función de `P`.",
+        "",
+        "En contraste, ASR-23 sí se cumple estrictamente: la operación privilegiada se "
+        "retiene antes de ejecutarse, mientras el OTP está pendiente se rechaza cualquier "
+        "otra operación del rol nuevo, y el atacante no ejecuta ni una. Ahí la detección "
+        "es síncrona y la reacción asíncrona solo añade los ~130 ms de cerrar la sesión.",
+        "",
+        "## Conclusión",
+        "",
+        "La detección se cumple en el 100 % de las repeticiones para ambos ASR, sin "
+        "falsos positivos y sin alertas duplicadas, y la revocación asíncrona cuesta "
+        "~130 ms. El bloqueo de la segunda operación se cumple estrictamente en ASR-23 "
+        "(detección síncrona) y solo condicionalmente en ASR-31 (detección a "
+        "posteriori): un atacante que consulta rápido obtiene ≈ `P × 9` pólizas ajenas "
+        "antes del primer `401`. Esa ventana de exposición es el coste medible del "
+        "estilo asíncrono que la hipótesis de AAS-H710 ponía a prueba, y crece de forma "
+        "lineal con `PERIODO_AUDITORIA_S`.",
+        "",
+        "Palancas de diseño que se derivan: reducir `P` acorta la ventana casi uno a "
+        "uno pero no la elimina; limitar en Validación el ritmo de consultas por sesión "
+        "acota la fuga por ventana con independencia de `P`; verificar el alcance de "
+        "forma síncrona en Validación la eliminaría, al precio de acoplar Validación al "
+        "dominio de pólizas (conocer la región de cada una), que es la decisión de "
+        "arquitectura que habría que defender o rechazar.",
     ]
-    notas = notas_denominador_parcial(modos)
-    for nota in notas:
-        lineas.append(f"- {nota}")
-    if notas:
-        lineas.append("")
+    return "\n".join(lineas) + "\n"
 
-    # --- ASR-12 --------------------------------------------------------------
-    lineas += [
-        "## ASR-12 · Enmascaramiento del cálculo erróneo",
-        "",
-        "Umbrales: retardo total añadido **≤ 300 ms** sobre la latencia media de la línea base, y",
-        "**0 primas erróneas** entregadas.",
-        "",
-    ]
-    if base and mascara:
-        media_base = base["latencia_ms"]["media"]
-        media_masc = mascara["latencia_ms"]["media"]
-        retardo = media_masc - media_base
-        lineas += [
-            "| Corrida | n | tasa real | media | p50 | p99 | máx |",
-            "|---|---:|---:|---:|---:|---:|---:|",
-        ]
-        for etiqueta, datos in (("A · línea base", base), ("C · con fallo activo", mascara)):
-            lat = datos["latencia_ms"]
-            lineas.append(
-                f"| {etiqueta} | {datos['enviadas']} "
-                f"| {datos['tasa_real_por_minuto']}/min "
-                f"| {lat['media']} ms | {lat['p50']} ms | {lat['p99']} ms | {lat['max']} ms |"
-            )
-        lineas += [
-            "",
-            f"- Retardo total añadido sobre la media: **{retardo:+.2f} ms** "
-            f"(base {media_base} ms → con fallo {media_masc} ms).",
-            f"- Veredicto latencia: {marca(retardo <= UMBRAL_RETARDO_MS)} "
-            f"(umbral ≤ {UMBRAL_RETARDO_MS} ms).",
-            "",
-            f"- Primas erróneas entregadas en la corrida C: "
-            f"**{mascara['primas_erroneas']}** de {mascara['latencia_ms']['n']} "
-            "respuestas verificadas una a una contra el dominio.",
-            f"- Veredicto integridad: {marca(mascara['primas_erroneas'] == 0)} (umbral: 0).",
-            "",
-            f"- Estados devueltos en la corrida C: `{mascara['por_estado_cotizacion']}`.",
-            "",
-        ]
-    else:
-        lineas += ["_Faltan corridas A o C._", ""]
 
-    # --- Disponibilidad observada -------------------------------------------
-    fallidas = {
-        modo: {c: n for c, n in d["por_http"].items() if c != "200"}
-        for modo, d in modos
-        if any(c != "200" for c in d["por_http"])
-    }
-    lineas += [
-        "## Observación de disponibilidad (fuera del alcance de ASR-11/12)",
-        "",
-    ]
-    if fallidas:
-        lineas += [
-            "Algunas cotizaciones no obtuvieron respuesta de éxito:",
-            "",
-            "| Modo | Respuestas no-200 |",
-            "|---|---|",
-        ]
-        lineas += [f"| `{m}` | `{v}` |" for m, v in sorted(fallidas.items())]
-        lineas += [
-            "",
-            "Son journeys en los que, con una réplica ya averiada, **otra sana**",
-            "no respondió dentro del presupuesto de 250 ms. Quedan dos",
-            "respuestas que no coinciden: no hay quórum y el sistema rechaza en",
-            "vez de adivinar. Es el comportamiento especificado —preferible a",
-            "entregar un valor sin confirmar— pero fija el coste de la política:",
-            "con quórum 2 de 3, perder una réplica sana mientras otra está rota",
-            "convierte el journey en un 503.",
-            "",
-        ]
-    else:
-        lineas += ["Todas las cotizaciones obtuvieron respuesta de éxito.", ""]
+def escribir_informe(directorio_resultados: Path, ruta_salida: Path = RUTA_INFORME) -> Path:
+    ruta_salida.write_text(generar_informe(directorio_resultados), encoding="utf-8")
+    return ruta_salida
 
-    # --- Límite conocido -----------------------------------------------------
-    lineas += [
-        "---",
-        "",
-        "## Límites conocidos del diseño",
-        "",
-        "### Coste de la política de quórum",
-        "",
-        "Con quórum 2 de 3, si una réplica sana no responde dentro del",
-        "presupuesto **mientras otra está averiada**, quedan dos respuestas que",
-        "no coinciden: no hay mayoría y el sistema devuelve 503 en vez de",
-        "adivinar. Rechazar es preferible a entregar un valor sin confirmar,",
-        "pero conviene tenerlo escrito: la disponibilidad del journey depende de",
-        "que al menos dos réplicas respondan a tiempo, no solo de que el cálculo",
-        "sea correcto.",
-        "",
-        "Es un suceso raro y transitorio —una corrida previa de este mismo",
-        "experimento lo observó 3 veces en 18.000 cotizaciones (0,017 %), y la",
-        "corrida definitiva ninguna—, así que la tabla de arriba puede no",
-        "mostrarlo. No depende del modo de fallo inyectado, sino de una pausa",
-        "puntual en una réplica sana.",
-        "",
-        "### Fallos correlacionados",
-        "",
-        "Las tres réplicas ejecutan el **mismo código**. La votación detecta",
-        "fallos *no correlacionados*: un error en una réplica, o en dos con",
-        "modos distintos. Un error **sistemático** en la fórmula o en el",
-        "tarifario produciría tres resultados idénticos y erróneos, y la",
-        "votación reportaría consenso sobre el valor equivocado sin registrar",
-        "incidente alguno.",
-        "",
-        "Detectar eso exigiría N-version programming real —tres",
-        "implementaciones independientes del cálculo bajo el mismo contrato—,",
-        "que se descartó por coste. Un desvío plausible idéntico en A, B y C",
-        "pasaría la votación y el oráculo del cliente lo marcaría como prima",
-        "errónea en la corrida C, no como incidente de ASR-11.",
-        "",
-    ]
 
-    SALIDA.parent.mkdir(parents=True, exist_ok=True)
-    SALIDA.write_text("\n".join(lineas), encoding="utf-8")
-    try:
-        mostrado: Path = SALIDA.relative_to(RAIZ)
-    except ValueError:
-        mostrado = SALIDA
-    print(f"informe escrito en {mostrado}")
+def main(argv: Sequence[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if len(args) != 1:
+        print("uso: python reporte.py <directorio_resultados>", file=sys.stderr)
+        return 2
+    ruta = escribir_informe(Path(args[0]))
+    print(f"informe escrito en {ruta}")
     return 0
 
 

@@ -12,7 +12,6 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import UTC, datetime
 from typing import Any
 
 _correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -47,12 +46,7 @@ class FormateadorJson(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         linea: dict[str, Any] = {
-            # No `formatTime`: usa la hora local del proceso y su `datefmt` va
-            # a `time.strftime`, que no tiene milisegundos (`%03d` sería el
-            # día del mes). Se parte del instante exacto del record, en UTC.
-            "momento": datetime.fromtimestamp(record.created, tz=UTC)
-            .isoformat(timespec="milliseconds")
-            .replace("+00:00", "Z"),
+            "momento": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%03dZ"),
             "nivel": record.levelname,
             "servicio": self.servicio,
             "logger": record.name,
