@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deja el host y el stack listos para el experimento. Encadena .env, venv,
-# imágenes, `up` y un POST de humo al gateway.
+# imágenes, `up` y un journey de humo contra el gateway: login del supervisor
+# y consulta de una póliza.
 #
 #   ./scripts/preparar.sh
 #   ./scripts/preparar.sh --sin-build   # reutiliza imágenes ya construidas
@@ -59,7 +60,7 @@ else
   echo ".env ya existe"
 fi
 
-paso "venv y Locust"
+paso "venv"
 ./scripts/bootstrap.sh
 
 paso "imágenes Docker"
@@ -67,8 +68,7 @@ if [[ "$SIN_BUILD" -eq 1 ]]; then
   echo "omitido (--sin-build)"
 else
   # El compose declara build.network: host (pip no resuelve pypi.org en la
-  # red por defecto de BuildKit). No se usa `compose build --network`: este
-  # Compose no trae esa bandera.
+  # red por defecto de BuildKit).
   docker compose build
   echo "imágenes listas"
 fi
@@ -76,8 +76,7 @@ fi
 paso "stack"
 ./scripts/up.sh
 
-paso "humo POST /v1/cotizaciones"
-# shellcheck disable=SC1091
+paso "humo: login + consulta de póliza"
 set -a
 # shellcheck disable=SC1091
 source .env
@@ -85,19 +84,12 @@ set +a
 PUERTO="${PUERTO_GATEWAY:-8000}"
 ok=0
 for _ in {1..20}; do
-  if cuerpo="$(curl -sf --max-time 5 -XPOST "http://localhost:${PUERTO}/v1/cotizaciones" \
+  if token="$(curl -sf --max-time 5 -XPOST "http://localhost:${PUERTO}/v1/sesiones" \
     -H 'content-type: application/json' \
-    -d @"$RAIZ/docs/ejemplos/solicitud.json")"; then
-    if printf '%s' "$cuerpo" | python -c '
-import json, sys
-d = json.load(sys.stdin)
-raise SystemExit(0 if d.get("estado") == "COTIZADO" else 1)
-'; then
-      printf '%s' "$cuerpo" | python -c '
-import json, sys
-d = json.load(sys.stdin)
-print("COTIZADO", d["cotizacion"]["prima_mensual"])
-'
+    -d @"$RAIZ/docs/ejemplos/login.json" | python -c 'import json,sys; print(json.load(sys.stdin)["token"])')"; then
+    if estado="$(curl -sf --max-time 5 "http://localhost:${PUERTO}/v1/polizas/POL-NOR-001" \
+      -H "authorization: Bearer ${token}" | python -c 'import json,sys; print(json.load(sys.stdin)["resultado"]["estado"])')"; then
+      echo "POL-NOR-001 ${estado}"
       ok=1
       break
     fi
@@ -105,12 +97,11 @@ print("COTIZADO", d["cotizacion"]["prima_mensual"])
   sleep 1
 done
 if [[ "$ok" -ne 1 ]]; then
-  echo "el gateway no cotizó; ver ./scripts/logs.sh" >&2
+  echo "el gateway no respondió al journey de humo; ver ./scripts/logs.sh" >&2
   exit 1
 fi
 
 echo
 echo "listo. el stack está arriba."
-echo "experimento rápido:   ./scripts/experiment/correr.sh --rapido --sin-pausa"
-echo "experimento oficial:  ./scripts/experiment/correr.sh --sin-pausa"
-echo "tableros: http://127.0.0.1:8090  (resultados)  http://127.0.0.1:8089  (Locust)"
+echo "experimento:  ./scripts/experiment/correr.sh"
+echo "tablero Locust: http://127.0.0.1:${PUERTO_LOCUST:-8089}"
