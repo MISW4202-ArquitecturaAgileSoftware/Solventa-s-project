@@ -1,6 +1,4 @@
-# Autenticación: login, verificación de sesiones, revocación y bloqueo. Único
-# servicio que conoce JWT_SECRET: para el resto el token es opaco. No usa la
-# cola: no se conecta a data-control ni a data-negocio.
+# Autenticación: emite y verifica sesiones; ejecuta la revocación y el bloqueo.
 
 services:
   autenticacion:
@@ -8,16 +6,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # Solo el build: pip necesita el DNS del host. Runtime sigue en
-      # backend/ops.
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en backend/ops.
       network: host
     restart: unless-stopped
     networks:
-      # backend: el gateway inicia y verifica sesiones; Reacción (dentro de
-      # validacion) revoca y bloquea.
+      # backend: recibe del gateway y de validacion (Reacción).
       - backend
-      # ops: solo para validar la fase y para que el experimento altere el rol
-      # del atacante.
+      # ops: solo para validar fases y para que el experimento altere roles.
       - ops
     ports:
       - "${PUERTO_AUTENTICACION:?falta PUERTO_AUTENTICACION en .env}:8000"

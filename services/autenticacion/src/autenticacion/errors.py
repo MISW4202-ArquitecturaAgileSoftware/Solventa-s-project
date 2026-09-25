@@ -1,9 +1,4 @@
-"""Excepciones de dominio y su traducción a RFC 9457 (`application/problem+json`).
-
-Los `type` son los de PLAN-IMPLEMENTACION.md §3.1. Los 401 se distinguen por
-`type`, no por el código: el experimento cuenta `empleado-bloqueado` y
-`credenciales` por separado.
-"""
+"""Excepciones de dominio y su traducción a RFC 9457 (`application/problem+json`)."""
 
 from typing import Any
 
@@ -25,10 +20,14 @@ class ErrorValidacion(ErrorSolventa):
     titulo = "Solicitud inválida"
     estado = 422
 
+    def __init__(self, campo: str, regla: str) -> None:
+        super().__init__(f"{campo} {regla}")
+        self.campo = campo
+
 
 class ErrorCredenciales(ErrorSolventa):
     tipo = "credenciales"
-    titulo = "Usuario o contraseña incorrectos"
+    titulo = "Credenciales incorrectas"
     estado = 401
 
 
@@ -58,18 +57,3 @@ def a_problem_json(
         },
         err.estado,
     )
-
-
-def problem_json_http(
-    estado: int, titulo: str, detalle: str, instance: str, correlation_id: str
-) -> dict[str, Any]:
-    """Errores del protocolo HTTP sin semántica propia (ruta inexistente, método
-    no admitido, fallo no previsto). RFC 9457 §4.2.1: `type` = `about:blank`."""
-    return {
-        "type": "about:blank",
-        "title": titulo,
-        "status": estado,
-        "detail": detalle,
-        "instance": instance,
-        "correlation_id": correlation_id,
-    }

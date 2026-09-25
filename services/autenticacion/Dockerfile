@@ -30,9 +30,8 @@ COPY --link src /app/src
 WORKDIR /app
 USER 10001
 
-# Un worker: la semilla y el SQLite son de un solo proceso. Hilos de sobra
-# porque el gateway verifica la sesión en CADA petición protegida; el login
-# es lo único caro (scrypt ≈ 35 ms) y hashlib suelta el GIL mientras deriva.
+# Un worker: la semilla y el SQLite son de un solo proceso. Los hilos atienden
+# la concurrencia; cada petición abre su propia conexión.
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "16", \
      "--worker-class", "gthread", "--timeout", "30", "--access-logfile", "-", \
      "autenticacion.app:crear_app()"]

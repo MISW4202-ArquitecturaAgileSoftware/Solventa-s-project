@@ -2,7 +2,6 @@
 #
 # Auditor autocontenido. El contexto de build es esta misma carpeta.
 
-# --- Etapa de construcción ---------------------------------------------------
 FROM python:3.14.6-slim AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -11,13 +10,10 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Ordenado por volatilidad: primero el manifiesto de dependencias, que cambia
-# poco; el código va después, para que tocar una línea no reinstale nada.
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install -r /tmp/requirements.txt
 
-# --- Imagen final ------------------------------------------------------------
 FROM python:3.14.6-slim AS runtime
 
 ENV PATH="/opt/venv/bin:$PATH" \
@@ -25,8 +21,6 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Usuario sin privilegios con UID numérico fijo; /data es suyo, ahí vive el
-# SQLite del historial.
 RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin solventa \
     && mkdir /data && chown 10001:10001 /data
 

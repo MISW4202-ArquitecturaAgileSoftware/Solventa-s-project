@@ -1,6 +1,4 @@
-# Auditor: worker puro (sin Flask ni gunicorn) que cada PERIODO_AUDITORIA_S lee
-# el stream `auditoria`, compara la región de cada consulta con el historial
-# del empleado e informa las regiones nuevas a Validación. Corazón de ASR-31.
+# Auditor: detección a posteriori de consultas fuera del alcance habitual (ASR-31).
 
 services:
   auditor:
@@ -8,35 +6,27 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # Solo el build: pip necesita el DNS del host. Runtime sigue aislado.
+      # Solo el build: pip necesita el DNS del host. Runtime sigue en backend/data-control.
       network: host
     restart: unless-stopped
     networks:
-      # backend: informa anomalías a Validación por HTTP.
+      # backend: llama por HTTP a Validación.
       - backend
-      # data-control: lee el stream `auditoria`. No alcanza a los workers de
-      # negocio ni publica en `sol:*`.
+      # data-control: lee el stream `auditoria` de Redis.
       - data-control
     volumes:
       - auditor-data:/data
     environment:
       REDIS_URL: ${REDIS_URL:?falta REDIS_URL en .env}
-      STREAM_AUDITORIA: ${STREAM_AUDITORIA:-auditoria}
-      GRUPO: auditor
-      # Fijo a propósito: los eventos no confirmados son pendientes de ESTE
-      # consumidor; con el hostname quedarían huérfanos al recrear el contenedor.
-      CONSUMIDOR: auditor-1
-      PERIODO_AUDITORIA_S: ${PERIODO_AUDITORIA_S:-5}
+      STREAM_AUDITORIA: ${STREAM_AUDITORIA:?falta STREAM_AUDITORIA en .env}
       URL_VALIDACION: ${URL_VALIDACION:?falta URL_VALIDACION en .env}
-      TIMEOUT_HTTP_MS: ${TIMEOUT_HTTP_MS:-2000}
+      PERIODO_AUDITORIA_S: ${PERIODO_AUDITORIA_S:-5}
       RUTA_DB: /data/auditor.db
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       redis:
         condition: service_healthy
       validacion:
-        # Solo "arrancado": si Validación aún no responde, el evento queda
-        # pendiente y se reintenta en el ciclo siguiente.
         condition: service_started
 
 networks:
