@@ -11,7 +11,17 @@ fi
 # Solo para desarrollo y tests fuera de contenedor; las imágenes no lo usan.
 # Cada servicio declara sus dependencias en su propia carpeta; aquí solo se
 # instalan todas en un mismo venv para poder correr la suite completa.
-[[ -d .venv ]] || python -m venv .venv
+if [[ ! -d .venv ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON=python
+  else
+    echo "error: no se encontró Python; instala Python 3.14 y vuelve a ejecutar este script" >&2
+    exit 1
+  fi
+  "$PYTHON" -m venv .venv
+fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 python -m pip install --quiet --upgrade pip
