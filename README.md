@@ -113,8 +113,9 @@ Pólizas: `POL-NOR-001..020`, `POL-SUR-001..020`, `POL-CEN-001..020`; las
 ./scripts/experiment/correr.sh --periodos 5 --repeticiones 3
 ```
 
-Al arrancar se abre el reporte en vivo en `http://127.0.0.1:8090` (o
-`PUERTO_TABLERO`). Muestra el paso en curso, los criterios recalculados con
+Al arrancar se abre automáticamente el navegador predeterminado con el reporte
+en vivo en `http://127.0.0.1:8090` (o `PUERTO_TABLERO`). Si no se puede abrir
+el navegador, la consola muestra la dirección para abrirla manualmente. Muestra el paso en curso, los criterios recalculados con
 las repeticiones ya cerradas y la ventana de exposición; durante la ráfaga,
 las respuestas 200 y 401 de cada atacante. El informe Markdown se escribe al
 final. `--sin-tablero` no abre esa página.

@@ -20,6 +20,7 @@ import json
 import os
 import subprocess
 import sys
+import webbrowser
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -345,7 +346,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         except OSError as err:
             print(f"no se pudo abrir el tablero en 127.0.0.1:{puerto}: {err}", file=sys.stderr)
             return 1
-        print(f"tablero: http://127.0.0.1:{puerto}")
+        url_tablero = f"http://127.0.0.1:{puerto}"
+        print(f"tablero: {url_tablero}")
+        try:
+            navegador_abierto = webbrowser.open_new_tab(url_tablero)
+        except (webbrowser.Error, OSError):
+            navegador_abierto = False
+        if not navegador_abierto:
+            print(f"no se pudo abrir el navegador; abre manualmente {url_tablero}")
 
     for periodo in periodos:
         for repeticion in range(1, args.repeticiones + 1):
