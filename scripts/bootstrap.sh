@@ -2,7 +2,10 @@
 set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
-[[ -f .env ]] || { echo "falta .env: copiar desde example.env" >&2; exit 1; }
+if [[ ! -f .env ]]; then
+  cp example.env .env
+  echo "creado .env desde example.env"
+fi
 
 # Prepara el entorno local de desarrollo y las herramientas de validación.
 # Solo para desarrollo y tests fuera de contenedor; las imágenes no lo usan.
