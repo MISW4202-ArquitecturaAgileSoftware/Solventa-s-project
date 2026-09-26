@@ -5,6 +5,19 @@ reacción ante elevación de privilegios y divulgación de información"** del
 módulo 7 (Seguridad) de Arquitecturas Ágiles de Software, sobre el caso de
 estudio Solventa (aseguradora: cotizaciones y pólizas).
 
+**Tabla de contenidos**
+
+- [1. Contexto del experimento](#1-contexto-del-experimento)
+- [2. Arquitectura](#2-arquitectura)
+- [3. Requisitos](#3-requisitos)
+- [4. Puesta en marcha](#4-puesta-en-marcha)
+- [5. Ejecutar el experimento](#5-ejecutar-el-experimento)
+- [6. Resultados esperados](#6-resultados-esperados)
+- [7. Resultados obtenidos (corrida oficial)](#7-resultados-obtenidos-corrida-oficial)
+- [8. Prueba manual del journey](#8-prueba-manual-del-journey)
+- [9. Limitaciones conocidas](#9-limitaciones-conocidas)
+- [10. Estructura del repositorio](#10-estructura-del-repositorio)
+
 ## 1. Contexto del experimento
 
 Solventa procesa operaciones de negocio (cotizar, consultar y aprobar pólizas)
@@ -107,11 +120,21 @@ Pólizas: `POL-NOR-001..020`, `POL-SUR-001..020`, `POL-CEN-001..020`; las
 
 ## 5. Ejecutar el experimento
 
+Consulta el [manual breve del experimento](docs/MANUAL-EXPERIMENTO.md) para
+ejecutar la prueba, seguir el avance y localizar las evidencias.
+
 ```bash
 ./scripts/experiment/correr.sh --rapido     # 1 corrida, PERIODO_AUDITORIA_S=2  (~1 min)
 ./scripts/experiment/correr.sh              # corrida oficial: periodos 2,5,10 × 5 repeticiones (~20 min)
 ./scripts/experiment/correr.sh --periodos 5 --repeticiones 3
 ```
+
+Al arrancar se abre automáticamente el navegador predeterminado con el reporte
+en vivo en `http://127.0.0.1:8090` (o `PUERTO_TABLERO`). Si no se puede abrir
+el navegador, la consola muestra la dirección para abrirla manualmente. Muestra el paso en curso, los criterios recalculados con
+las repeticiones ya cerradas y la ventana de exposición; durante la ráfaga,
+las respuestas 200 y 401 de cada atacante. El informe Markdown se escribe al
+final. `--sin-tablero` no abre esa página.
 
 Cada repetición **reinicia el stack desde cero** (`docker compose down -v &&
 up --wait`), porque un empleado revocado no se puede reutilizar, y luego

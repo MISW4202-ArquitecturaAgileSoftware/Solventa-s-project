@@ -41,6 +41,7 @@ class CriterioAceptacion:
     umbral: str
     valor_observado: str
     cumple: bool
+    descripcion: str
 
     def a_dict(self) -> dict[str, Any]:
         return {
@@ -48,6 +49,7 @@ class CriterioAceptacion:
             "umbral": self.umbral,
             "valor_observado": self.valor_observado,
             "cumple": self.cumple,
+            "descripcion": self.descripcion,
         }
 
 
@@ -166,6 +168,25 @@ def intervalo_medio_entre_consultas_ms(filas: Sequence[Mapping[str, Any]]) -> fl
         tiempos = sorted(float(f["t"]) for f in filas_usuario)
         huecos.extend((b - a) * 1000 for a, b in zip(tiempos, tiempos[1:], strict=False))
     return sum(huecos) / len(huecos) if huecos else 0.0
+
+
+def operaciones_asr31_antes_del_cierre(
+    atacantes: Sequence[Mapping[str, Any]], filas_locust: Sequence[Mapping[str, Any]]
+) -> int:
+    """Respuestas 200 del atacante de ASR-31 anteriores al cierre de la sesión.
+
+    En el escenario lento cuenta la consulta cuyo estado es 200. En la ráfaga
+    suma, por atacante, las 200 anteriores a su primer 401. Un 200 sin 401
+    posterior también cuenta: la sesión siguió abierta y la operación se sirvió.
+    """
+    servidas = sum(
+        1
+        for atacante in atacantes
+        for campo in ("estado_consulta_1", "estado_consulta_2")
+        if atacante.get(campo) == 200
+    )
+    servidas += sum(consultas_200_antes_del_401_por_usuario(filas_locust).values())
+    return servidas
 
 
 def consultas_200_antes_del_401_por_usuario(filas: Sequence[Mapping[str, Any]]) -> dict[str, int]:

@@ -1,0 +1,18 @@
+{
+  "fecha": "2026-09-25T03:38:47Z",
+  "periodos": [
+    2,
+    5,
+    10
+  ],
+  "repeticiones": 5,
+  "imagenes": {
+    "redis": "8.10-alpine",
+    "solventa/api-gateway": "dev",
+    "solventa/gestion-polizas": "dev",
+    "solventa/gestion-cotizador": "dev",
+    "solventa/autenticacion": "dev",
+    "solventa/validacion": "dev",
+    "solventa/auditor": "dev"
+  }
+}

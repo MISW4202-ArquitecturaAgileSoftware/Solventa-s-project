@@ -104,4 +104,5 @@ fi
 echo
 echo "listo. el stack está arriba."
 echo "experimento:  ./scripts/experiment/correr.sh"
+echo "reporte en vivo: http://127.0.0.1:${PUERTO_TABLERO:-8090}  (mientras corre el experimento)"
 echo "tablero Locust: http://127.0.0.1:${PUERTO_LOCUST:-8089}"

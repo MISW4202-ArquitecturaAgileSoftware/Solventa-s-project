@@ -4,6 +4,9 @@ limpias, corre los cuatro escenarios secuenciales deterministas, lanza la
 ráfaga concurrente de Locust, vuelca las alertas de Reacción y guarda toda la
 evidencia en JSON. Al final genera `docs/RESULTADOS-EXPERIMENTO.md`.
 
+Mientras corre, publica cada paso en `estado.json` y abre el tablero en
+`http://127.0.0.1:8090`.
+
 Un empleado revocado o bloqueado no se puede reutilizar: por eso cada
 repetición reinicia el stack (`docker compose down -v && up --wait`), que
 resiembra los datos de §2.2 y §2.3.
@@ -16,7 +19,9 @@ import dataclasses
 import json
 import os
 import subprocess
-from collections.abc import Sequence
+import sys
+import webbrowser
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,7 +29,9 @@ from typing import Any
 import requests  # type: ignore[import-untyped]
 
 import escenarios
+import estado
 import reporte
+import tablero
 from cliente import ClienteExperimento
 from entorno import (
     ATACANTE_ASR23,
@@ -39,6 +46,7 @@ from entorno import (
     SUPERVISOR,
     Entorno,
     desde_env,
+    leer_env,
 )
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -61,6 +69,9 @@ def _parsear_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--sin-reinicio", action="store_true", help="no reinicia el stack; solo para depurar"
+    )
+    parser.add_argument(
+        "--sin-tablero", action="store_true", help="no abre el reporte en vivo del puerto 8090"
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
     if args.rapido:
@@ -158,64 +169,148 @@ def _imagenes_docker() -> dict[str, str]:
     return {str(fila["Repository"]): str(fila["Tag"]) for fila in filas}
 
 
+def _puerto_tablero() -> int:
+    if os.environ.get("PUERTO_TABLERO"):
+        return int(os.environ["PUERTO_TABLERO"])
+    return int(leer_env().get("PUERTO_TABLERO", str(tablero.PUERTO_DEFECTO)))
+
+
+def _anunciar(en_curso: estado.CorridaEnCurso, paso: str, exito: bool, detalle: str) -> None:
+    print(f"    {detalle}")
+    en_curso.cerrar(paso, "ok" if exito else "fallo", detalle)
+
+
+def _ejecutar[T](en_curso: estado.CorridaEnCurso, paso: str, accion: Callable[[], T]) -> T:
+    en_curso.comenzar(paso)
+    try:
+        return accion()
+    except Exception:
+        en_curso.cerrar(paso, "fallo", "el paso terminó con error")
+        raise
+
+
 def _correr_repeticion(
-    cliente: ClienteExperimento, periodo: int, repeticion: int, directorio: Path
+    cliente: ClienteExperimento,
+    periodo: int,
+    repeticion: int,
+    directorio: Path,
+    en_curso: estado.CorridaEnCurso,
 ) -> None:
     print("  escenario: atacante ASR-23…")
-    resultado_atacante_23 = escenarios.atacante_asr23(
-        cliente, ATACANTE_ASR23, POLIZA_ATACANTE_ASR23
+    resultado_atacante_23 = _ejecutar(
+        en_curso,
+        "atacante_asr23",
+        lambda: escenarios.atacante_asr23(cliente, ATACANTE_ASR23, POLIZA_ATACANTE_ASR23),
     )
-    print(
-        f"    aprobacion_1={resultado_atacante_23.estado_aprobacion_1} "
+    atacante_23 = dataclasses.asdict(resultado_atacante_23)
+    _anunciar(
+        en_curso,
+        "atacante_asr23",
+        estado.exito_atacante_asr23(atacante_23),
+        f"aprobacion_1={resultado_atacante_23.estado_aprobacion_1} "
         f"otp={resultado_atacante_23.estado_otp}/{resultado_atacante_23.tipo_error_otp} "
         f"aprobacion_2={resultado_atacante_23.estado_aprobacion_2}/"
         f"{resultado_atacante_23.tipo_error_aprobacion_2} "
-        f"latencia={resultado_atacante_23.latencia_revocacion_ms:.0f}ms"
+        f"latencia={resultado_atacante_23.latencia_revocacion_ms:.0f}ms",
     )
 
     print("  escenario: legítimo ASR-23…")
-    resultado_legitimo_23 = escenarios.legitimo_asr23(
-        cliente, LEGITIMO_ASR23, POLIZA_LEGITIMO_ASR23
+    resultado_legitimo_23 = _ejecutar(
+        en_curso,
+        "legitimo_asr23",
+        lambda: escenarios.legitimo_asr23(cliente, LEGITIMO_ASR23, POLIZA_LEGITIMO_ASR23),
     )
-    print(f"    resultado_operacion={resultado_legitimo_23.estado_operacion_resultado}")
+    legitimo_23 = dataclasses.asdict(resultado_legitimo_23)
+    _anunciar(
+        en_curso,
+        "legitimo_asr23",
+        estado.exito_legitimo_asr23(legitimo_23),
+        f"resultado_operacion={resultado_legitimo_23.estado_operacion_resultado}",
+    )
 
     print("  escenario: atacante ASR-31 secuencial…")
-    resultado_atacante_31 = escenarios.atacante_asr31_secuencial(
-        cliente, ATACANTE_ASR31_SECUENCIAL, POLIZA_SUR_SECUENCIAL, periodo
+    resultado_atacante_31 = _ejecutar(
+        en_curso,
+        "atacante_asr31",
+        lambda: escenarios.atacante_asr31_secuencial(
+            cliente, ATACANTE_ASR31_SECUENCIAL, POLIZA_SUR_SECUENCIAL, periodo
+        ),
     )
-    print(
-        f"    consulta_1={resultado_atacante_31.estado_consulta_1} "
+    atacante_31 = dataclasses.asdict(resultado_atacante_31)
+    _anunciar(
+        en_curso,
+        "atacante_asr31",
+        estado.exito_atacante_asr31(atacante_31),
+        f"consulta_1={resultado_atacante_31.estado_consulta_1} "
         f"consulta_2={resultado_atacante_31.estado_consulta_2}/"
-        f"{resultado_atacante_31.tipo_error_consulta_2}"
+        f"{resultado_atacante_31.tipo_error_consulta_2}",
     )
 
     print("  escenario: legítimo inusual ASR-31…")
-    resultado_legitimo_31 = escenarios.legitimo_inusual_asr31(
-        cliente, LEGITIMO_INUSUAL_ASR31, POLIZA_CENTRO_INUSUAL, periodo
+    resultado_legitimo_31 = _ejecutar(
+        en_curso,
+        "legitimo_inusual",
+        lambda: escenarios.legitimo_inusual_asr31(
+            cliente, LEGITIMO_INUSUAL_ASR31, POLIZA_CENTRO_INUSUAL, periodo
+        ),
     )
-    print(
-        f"    consulta_1={resultado_legitimo_31.estado_consulta_1} "
-        f"consulta_2={resultado_legitimo_31.estado_consulta_2}"
+    inusual = dataclasses.asdict(resultado_legitimo_31)
+    _anunciar(
+        en_curso,
+        "legitimo_inusual",
+        estado.exito_legitimo_inusual(inusual),
+        f"consulta_1={resultado_legitimo_31.estado_consulta_1} "
+        f"consulta_2={resultado_legitimo_31.estado_consulta_2}",
     )
 
     print("  Locust: ráfaga ASR-31 concurrente + tráfico habitual…")
     prefijo = f"p{periodo}-r{repeticion}"
-    ruta_jsonl = directorio / f"{prefijo}-locust.jsonl"
-    filas_locust = _correr_locust(
-        desde_env(), periodo, ruta_jsonl, directorio / f"{prefijo}-locust"
+    nombre_jsonl = f"{prefijo}-locust.jsonl"
+    ruta_jsonl = directorio / nombre_jsonl
+    en_curso.comenzar("locust", jsonl=nombre_jsonl)
+    try:
+        filas_locust = _correr_locust(
+            desde_env(), periodo, ruta_jsonl, directorio / f"{prefijo}-locust"
+        )
+    except Exception:
+        en_curso.cerrar("locust", "fallo", "el paso terminó con error")
+        raise
+    _anunciar(
+        en_curso,
+        "locust",
+        estado.exito_rafaga(filas_locust),
+        f"{len(filas_locust)} respuestas registradas",
     )
-    print(f"    {len(filas_locust)} respuestas registradas")
 
     print("  volcando alertas de Reacción (Validación)…")
-    alertas = _volcar_alertas(desde_env())
-    duplicadas = _contar_alertas_duplicadas()
-    print(f"    {len(alertas)} alertas, {duplicadas} duplicadas en logs")
+
+    def _recolectar_alertas() -> tuple[list[dict[str, Any]], int]:
+        return _volcar_alertas(desde_env()), _contar_alertas_duplicadas()
+
+    alertas, duplicadas = _ejecutar(en_curso, "alertas", _recolectar_alertas)
+    _anunciar(
+        en_curso,
+        "alertas",
+        True,
+        f"{len(alertas)} alertas, {duplicadas} duplicadas en logs",
+    )
 
     print("  verificando estados de pólizas como supervisor…")
-    estados_polizas = _verificar_estados_polizas(
-        cliente, [POLIZA_ATACANTE_ASR23, POLIZA_LEGITIMO_ASR23]
+    polizas_cierre = [POLIZA_ATACANTE_ASR23, POLIZA_LEGITIMO_ASR23]
+    estados_polizas = _ejecutar(
+        en_curso,
+        "supervisor",
+        lambda: _verificar_estados_polizas(cliente, polizas_cierre),
     )
-    print(f"    {estados_polizas}")
+    _anunciar(
+        en_curso,
+        "supervisor",
+        estado.exito_cierre(
+            estados_polizas,
+            {POLIZA_ATACANTE_ASR23: "PENDIENTE", POLIZA_LEGITIMO_ASR23: "APROBADA"},
+        ),
+        str(estados_polizas),
+    )
 
     corrida = {
         "periodo_auditoria_s": periodo,
@@ -241,16 +336,42 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     directorio = DIRECTORIO_RESULTADOS / timestamp
-    directorio.mkdir(parents=True, exist_ok=True)
+    en_curso = estado.CorridaEnCurso(
+        directorio, periodos, args.repeticiones, DIRECTORIO_RESULTADOS / "actual.json"
+    )
+    if not args.sin_tablero:
+        puerto = _puerto_tablero()
+        try:
+            tablero.servir(puerto, DIRECTORIO_RESULTADOS)
+        except OSError as err:
+            print(f"no se pudo abrir el tablero en 127.0.0.1:{puerto}: {err}", file=sys.stderr)
+            return 1
+        url_tablero = f"http://127.0.0.1:{puerto}"
+        print(f"tablero: {url_tablero}")
+        try:
+            navegador_abierto = webbrowser.open_new_tab(url_tablero)
+        except (webbrowser.Error, OSError):
+            navegador_abierto = False
+        if not navegador_abierto:
+            print(f"no se pudo abrir el navegador; abre manualmente {url_tablero}")
 
     for periodo in periodos:
         for repeticion in range(1, args.repeticiones + 1):
             print(f"=== periodo={periodo}s repeticion={repeticion}/{args.repeticiones} ===")
-            if not args.sin_reinicio:
+            en_curso.empezar_repeticion(periodo, repeticion)
+            en_curso.comenzar("reinicio")
+            if args.sin_reinicio:
+                en_curso.cerrar("reinicio", "ok", "sin reinicio")
+            else:
                 print("  reiniciando el stack…")
-                _reiniciar(periodo)
+                try:
+                    _reiniciar(periodo)
+                except Exception:
+                    en_curso.cerrar("reinicio", "fallo", "el stack no arrancó")
+                    raise
+                en_curso.cerrar("reinicio", "ok", "stack listo")
             cliente = ClienteExperimento(desde_env())
-            _correr_repeticion(cliente, periodo, repeticion, directorio)
+            _correr_repeticion(cliente, periodo, repeticion, directorio, en_curso)
 
     print("capturando versiones de imágenes…")
     meta = {
@@ -265,6 +386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print("generando informe…")
     ruta_informe = reporte.escribir_informe(directorio)
+    en_curso.terminar(str(ruta_informe.relative_to(RAIZ)))
     print(f"informe escrito en {ruta_informe}")
     print(f"evidencia guardada en {directorio}")
     return 0

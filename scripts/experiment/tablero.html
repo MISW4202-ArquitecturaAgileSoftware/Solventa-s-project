@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solventa — experimento en vivo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --fondo: #efeae2;
+      --papel: #fffdf8;
+      --tinta: #1c1915;
+      --suave: #5e584e;
+      --linea: #e3d9cc;
+      --acento: #0f4c5c;
+      --ok: #176b42;
+      --ok-fondo: #e7f4ec;
+      --fallo: #9d174d;
+      --fallo-fondo: #fde8f0;
+      --curso: #9a3412;
+      --curso-fondo: #fff4e8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.45 "Iowan Old Style", Palatino, Georgia, serif;
+      background: var(--fondo);
+      color: var(--tinta);
+    }
+    main { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; }
+    h1 { font-size: 1.85rem; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+    h2 {
+      font: 600 0.78rem/1.3 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--suave);
+      margin: 0 0 12px;
+    }
+    p { margin: 0; }
+    .cabecera { margin-bottom: 22px; }
+    .sub { color: var(--suave); margin-top: 8px; }
+    .aviso { color: var(--fallo); min-height: 1.2em; margin-top: 8px; font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; }
+    .cabecera-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .fase {
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--acento);
+      color: white;
+      font: 600 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .fase.terminado { background: var(--ok); }
+    .fase.esperando, .fase.error { background: var(--suave); }
+    .avance {
+      margin-top: 14px;
+      height: 6px;
+      background: #e4dbd0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .avance span { display: block; height: 100%; background: var(--acento); }
+    .mosaico {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .baldosa {
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .baldosa.alerta { background: var(--fallo-fondo); border-color: #f3c2d4; }
+    .baldosa .etiqueta {
+      font: 600 12px/1.3 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--suave);
+    }
+    .baldosa .cifra {
+      display: block;
+      margin-top: 4px;
+      font: 600 1.7rem/1.1 ui-sans-serif, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    .columnas {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+      gap: 22px;
+      align-items: start;
+    }
+    section { margin-top: 28px; }
+    .columnas section { margin-top: 0; }
+    ol.pasos { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+    ol.pasos li {
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      padding: 10px 12px 10px 14px;
+      border-left-width: 4px;
+    }
+    ol.pasos li.en_curso { border-left-color: var(--curso); background: var(--curso-fondo); }
+    ol.pasos li.ok { border-left-color: var(--ok); }
+    ol.pasos li.fallo { border-left-color: var(--fallo); background: var(--fallo-fondo); }
+    ol.pasos li.pendiente { border-left-color: #d9d0c4; }
+    .marca {
+      font: 600 11px/1.3 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--suave);
+    }
+    li.en_curso .marca { color: var(--curso); }
+    li.ok .marca { color: var(--ok); }
+    li.fallo .marca { color: var(--fallo); }
+    .paso-titulo { display: block; margin-top: 2px; }
+    .detalle {
+      display: block;
+      margin-top: 4px;
+      color: var(--suave);
+      font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    .atacantes, .criterios, .periodos { display: grid; gap: 10px; }
+    .tarjeta, .criterio, .periodo {
+      background: var(--papel);
+      border: 1px solid var(--linea);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    .tarjeta.fuga, .criterio.no {
+      background: var(--fallo-fondo);
+      border-color: #f3c2d4;
+    }
+    .tarjeta.limpia { border-color: #b7dfc8; }
+    .nombre {
+      font: 600 15px/1.3 ui-sans-serif, system-ui, sans-serif;
+    }
+    .nota-fuga {
+      margin-top: 8px;
+      color: var(--fallo);
+      font: 600 13px/1.35 ui-sans-serif, system-ui, sans-serif;
+    }
+    .medidas {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .medidas span, .stats span {
+      display: block;
+      font: 12px/1.3 ui-sans-serif, system-ui, sans-serif;
+      color: var(--suave);
+    }
+    .medidas strong, .stats strong {
+      display: block;
+      margin-top: 2px;
+      font: 600 1.05rem/1.2 ui-sans-serif, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    .grupo { margin-top: 16px; }
+    .grupo h3 {
+      margin: 0 0 8px;
+      font: 600 13px/1.3 ui-sans-serif, system-ui, sans-serif;
+      color: var(--acento);
+    }
+    .criterio { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+    .sello {
+      min-width: 3.2rem;
+      text-align: center;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font: 700 13px/1.2 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: 0.04em;
+    }
+    .sello.si { background: var(--ok-fondo); color: var(--ok); }
+    .sello.no { background: var(--fallo); color: white; }
+    .par {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 6px;
+      font: 14px/1.3 ui-sans-serif, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    .par b { font-weight: 650; }
+    .descripcion { margin: 6px 0 0; color: var(--suave); font-size: 0.92rem; }
+    .vacio { color: var(--suave); }
+    .fila-barra {
+      display: grid;
+      grid-template-columns: 5.5rem 1fr 4.5rem;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font: 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+    .pista { background: #e4dbd0; height: 8px; border-radius: 999px; overflow: hidden; }
+    .relleno { background: var(--acento); height: 100%; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px 12px;
+      margin-top: 8px;
+    }
+    .informe { margin-top: 8px; }
+    @media (max-width: 800px) {
+      .mosaico, .columnas, .stats { grid-template-columns: 1fr; }
+      .medidas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="cabecera">
+      <div class="cabecera-fila">
+        <h1>Solventa — experimento en vivo</h1>
+        <span class="fase esperando" id="fase">esperando</span>
+      </div>
+      <p class="sub" id="resumen">Esperando a que empiece la corrida.</p>
+      <div class="avance" id="avance" hidden><span id="avance-relleno"></span></div>
+      <p class="aviso" id="aviso" role="status"></p>
+    </header>
+
+    <div class="mosaico" id="mosaico"></div>
+
+    <div class="columnas">
+      <section>
+        <h2>Repetición en curso</h2>
+        <ol class="pasos" id="pasos"></ol>
+      </section>
+      <section>
+        <h2 id="titulo-rafaga">Ráfaga</h2>
+        <div id="rafaga"></div>
+      </section>
+    </div>
+
+    <section>
+      <h2>Criterios de aceptación</h2>
+      <p class="sub" id="muestras"></p>
+      <p class="sub informe" id="informe"></p>
+      <div id="criterios"></div>
+    </section>
+
+    <section>
+      <h2>Ventana de exposición</h2>
+      <div id="barras"></div>
+      <div id="ventana"></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let ultimo = null;
+
+    function texto(nodo, valor) {
+      nodo.textContent = valor == null ? "" : String(valor);
+    }
+
+    function ms(valor) {
+      return valor == null ? "sin 401" : Math.round(valor) + " ms";
+    }
+
+    function faseLegible(fase) {
+      if (fase === "en_curso") return "en curso";
+      if (fase === "terminado") return "definitivo";
+      if (fase === "error") return "error";
+      return "esperando";
+    }
+
+    function vacio(caja, mensaje) {
+      const nota = document.createElement("p");
+      nota.className = "vacio";
+      texto(nota, mensaje);
+      caja.append(nota);
+    }
+
+    function baldosa(etiqueta, cifra, alerta) {
+      const caja = document.createElement("div");
+      caja.className = "baldosa" + (alerta ? " alerta" : "");
+      const nombre = document.createElement("span");
+      nombre.className = "etiqueta";
+      texto(nombre, etiqueta);
+      const numero = document.createElement("strong");
+      numero.className = "cifra";
+      texto(numero, cifra);
+      caja.append(nombre, numero);
+      return caja;
+    }
+
+    function pintarMosaico(datos) {
+      const caja = $("mosaico");
+      caja.replaceChildren();
+      if (datos.fase === "esperando" || datos.fase === "error") {
+        caja.hidden = true;
+        return;
+      }
+      caja.hidden = false;
+      const criterios = datos.criterios || [];
+      const incumplidos = criterios.filter((criterio) => !criterio.cumple).length;
+      const cierre = criterios.find((criterio) =>
+        String(criterio.metrica).includes("antes de cerrar")
+      );
+      caja.append(
+        baldosa(
+          "Repeticiones cerradas",
+          (datos.corridas_cerradas || 0) + " / " + (datos.corridas_totales || 0),
+          false
+        ),
+        baldosa(
+          "Criterios sin cumplir",
+          criterios.length ? String(incumplidos) : "—",
+          incumplidos > 0
+        ),
+        baldosa(
+          "Operaciones antes del cierre",
+          cierre ? cierre.valor_observado : "—",
+          cierre ? !cierre.cumple : false
+        )
+      );
+      const totales = datos.corridas_totales || 0;
+      const avance = $("avance");
+      if (totales > 0) {
+        avance.hidden = false;
+        $("avance-relleno").style.width =
+          Math.round(((datos.corridas_cerradas || 0) / totales) * 100) + "%";
+      } else {
+        avance.hidden = true;
+      }
+    }
+
+    function pintarPasos(pasos) {
+      const lista = $("pasos");
+      lista.replaceChildren();
+      if (!pasos.length) {
+        const item = document.createElement("li");
+        item.className = "pendiente";
+        texto(item, "Todavía no hay una repetición en curso.");
+        lista.append(item);
+        return;
+      }
+      for (const paso of pasos) {
+        const item = document.createElement("li");
+        item.className = paso.estado;
+        const marca = document.createElement("span");
+        marca.className = "marca";
+        texto(marca, paso.estado === "en_curso" ? "en curso" : paso.estado);
+        const titulo = document.createElement("strong");
+        titulo.className = "paso-titulo";
+        texto(titulo, paso.titulo);
+        item.append(marca, titulo);
+        if (paso.detalle) {
+          const detalle = document.createElement("span");
+          detalle.className = "detalle";
+          texto(detalle, paso.detalle);
+          item.append(detalle);
+        }
+        lista.append(item);
+      }
+    }
+
+    function pintarRafaga(datos) {
+      const caja = $("rafaga");
+      caja.replaceChildren();
+      const filas = datos.rafaga || [];
+      const enCurso = datos.paso_actual === "locust";
+      texto($("titulo-rafaga"), enCurso ? "Ráfaga en curso" : "Última ráfaga");
+      if (!filas.length) {
+        vacio(
+          caja,
+          enCurso
+            ? "Locust todavía no registró respuestas."
+            : "La ráfaga de esta repetición aún no empieza."
+        );
+        return;
+      }
+      const lista = document.createElement("div");
+      lista.className = "atacantes";
+      for (const fila of filas) {
+        const tarjeta = document.createElement("article");
+        const fuga = fila.consultas_200 > 0;
+        tarjeta.className = "tarjeta" + (fuga ? " fuga" : " limpia");
+        const nombre = document.createElement("strong");
+        nombre.className = "nombre";
+        texto(nombre, fila.usuario);
+        const medidas = document.createElement("div");
+        medidas.className = "medidas";
+        for (const [etiqueta, valor] of [
+          ["200 antes del 401", fila.consultas_200],
+          ["401", fila.respuestas_401],
+          ["Ventana", ms(fila.ventana_ms)],
+        ]) {
+          const celda = document.createElement("div");
+          const rotulo = document.createElement("span");
+          texto(rotulo, etiqueta);
+          const cifra = document.createElement("strong");
+          texto(cifra, valor);
+          celda.append(rotulo, cifra);
+          medidas.append(celda);
+        }
+        tarjeta.append(nombre, medidas);
+        if (fuga) {
+          const nota = document.createElement("p");
+          nota.className = "nota-fuga";
+          texto(nota, "Se sirvió una operación antes de cerrar la sesión.");
+          tarjeta.append(nota);
+        }
+        lista.append(tarjeta);
+      }
+      caja.append(lista);
+    }
+
+    function grupoDe(metrica) {
+      if (String(metrica).startsWith("ASR-23")) return "ASR-23";
+      if (String(metrica).startsWith("ASR-31")) return "ASR-31";
+      return "Alertas";
+    }
+
+    function pintarCriterios(datos) {
+      const caja = $("criterios");
+      caja.replaceChildren();
+      const cerradas = datos.corridas_cerradas || 0;
+      const totales = datos.corridas_totales || 0;
+      let leyenda = cerradas + " de " + totales + " repeticiones cerradas";
+      if (datos.criterios_definitivos) leyenda += " · definitivo";
+      else if (cerradas) leyenda += " · parcial";
+      texto($("muestras"), datos.fase === "esperando" ? "" : leyenda);
+      texto($("informe"), datos.informe ? "Informe: " + datos.informe : "");
+      const criterios = datos.criterios || [];
+      if (!criterios.length) {
+        vacio(caja, "Los criterios aparecen al cerrar la primera repetición.");
+        return;
+      }
+      const orden = ["ASR-23", "ASR-31", "Alertas"];
+      for (const nombre of orden) {
+        const propios = criterios.filter((criterio) => grupoDe(criterio.metrica) === nombre);
+        if (!propios.length) continue;
+        const grupo = document.createElement("div");
+        grupo.className = "grupo";
+        const titulo = document.createElement("h3");
+        texto(titulo, nombre);
+        const lista = document.createElement("div");
+        lista.className = "criterios";
+        for (const criterio of propios) {
+          const articulo = document.createElement("article");
+          articulo.className = "criterio" + (criterio.cumple ? "" : " no");
+          const sello = document.createElement("span");
+          sello.className = "sello " + (criterio.cumple ? "si" : "no");
+          texto(sello, criterio.cumple ? "sí" : "NO");
+          const cuerpo = document.createElement("div");
+          const metrica = document.createElement("strong");
+          metrica.className = "nombre";
+          texto(metrica, criterio.metrica.replace(/^ASR-\d+ · /, ""));
+          const par = document.createElement("div");
+          par.className = "par";
+          const observado = document.createElement("span");
+          observado.append("Observado ");
+          const valor = document.createElement("b");
+          texto(valor, criterio.valor_observado);
+          observado.append(valor);
+          const umbral = document.createElement("span");
+          umbral.append("Umbral ");
+          const meta = document.createElement("b");
+          texto(meta, criterio.umbral);
+          umbral.append(meta);
+          par.append(observado, umbral);
+          cuerpo.append(metrica, par);
+          if (criterio.descripcion) {
+            const descripcion = document.createElement("p");
+            descripcion.className = "descripcion";
+            texto(descripcion, criterio.descripcion);
+            cuerpo.append(descripcion);
+          }
+          articulo.append(sello, cuerpo);
+          lista.append(articulo);
+        }
+        grupo.append(titulo, lista);
+        caja.append(grupo);
+      }
+    }
+
+    function pintarVentana(filas) {
+      const barras = $("barras");
+      const caja = $("ventana");
+      barras.replaceChildren();
+      caja.replaceChildren();
+      if (!filas.length) {
+        vacio(caja, "La ventana por periodo aparece al cerrar cada repetición.");
+        return;
+      }
+      const maximo = Math.max(...filas.map((fila) => fila.ventana_p50_ms || 0), 1);
+      const lista = document.createElement("div");
+      lista.className = "periodos";
+      for (const fila of filas) {
+        const renglon = document.createElement("div");
+        renglon.className = "fila-barra";
+        const etiqueta = document.createElement("span");
+        texto(etiqueta, "P = " + fila.periodo_auditoria_s + " s");
+        const pista = document.createElement("div");
+        pista.className = "pista";
+        const relleno = document.createElement("div");
+        relleno.className = "relleno";
+        relleno.style.width = Math.round((fila.ventana_p50_ms / maximo) * 100) + "%";
+        pista.append(relleno);
+        const valor = document.createElement("span");
+        texto(valor, Math.round(fila.ventana_p50_ms) + " ms");
+        renglon.append(etiqueta, pista, valor);
+        barras.append(renglon);
+
+        const periodo = document.createElement("article");
+        periodo.className = "periodo";
+        const titulo = document.createElement("strong");
+        titulo.className = "nombre";
+        texto(titulo, "Periodo " + fila.periodo_auditoria_s + " s · " + fila.muestras + " muestras");
+        const stats = document.createElement("div");
+        stats.className = "stats";
+        const celdas = [
+          ["mín", Math.round(fila.ventana_min_ms) + " ms"],
+          ["p50", Math.round(fila.ventana_p50_ms) + " ms"],
+          ["p95", Math.round(fila.ventana_p95_ms) + " ms"],
+          ["máx", Math.round(fila.ventana_max_ms) + " ms"],
+          ["intervalo", Math.round(fila.intervalo_ms) + " ms"],
+          [
+            "200 antes del bloqueo",
+            fila.consultas_200_min + " / " + fila.consultas_200_promedio.toFixed(1) + " / " + fila.consultas_200_max,
+          ],
+        ];
+        for (const [rotulo, cifra] of celdas) {
+          const celda = document.createElement("div");
+          const nombre = document.createElement("span");
+          texto(nombre, rotulo);
+          const fuerte = document.createElement("strong");
+          texto(fuerte, cifra);
+          celda.append(nombre, fuerte);
+          stats.append(celda);
+        }
+        periodo.append(titulo, stats);
+        lista.append(periodo);
+      }
+      caja.append(lista);
+    }
+
+    function pintar(datos) {
+      ultimo = datos;
+      const fase = $("fase");
+      texto(fase, faseLegible(datos.fase));
+      fase.className = "fase " + (datos.fase || "esperando");
+      if (datos.fase === "esperando") {
+        texto($("resumen"), "Esperando a que empiece la corrida.");
+      } else if (datos.fase === "error") {
+        texto($("resumen"), datos.detalle || "No se pudo leer el estado.");
+      } else if (datos.fase === "terminado") {
+        texto($("resumen"), "Corrida terminada. " + (datos.corridas_cerradas || 0) + " repeticiones cerradas.");
+      } else {
+        const periodo = datos.periodo_actual == null ? "—" : datos.periodo_actual + " s";
+        const repeticion = (datos.repeticion_actual || "—") + " de " + (datos.repeticiones || "—");
+        texto($("resumen"), "Periodo " + periodo + " · repetición " + repeticion);
+      }
+      pintarMosaico(datos);
+      pintarPasos(datos.pasos || []);
+      pintarRafaga(datos);
+      pintarCriterios(datos);
+      pintarVentana(datos.ventana || []);
+    }
+
+    async function cargar() {
+      try {
+        const respuesta = await fetch("/api/estado", { cache: "no-store" });
+        if (!respuesta.ok) throw new Error("estado " + respuesta.status);
+        pintar(await respuesta.json());
+        texto($("aviso"), "");
+      } catch (err) {
+        texto(
+          $("aviso"),
+          ultimo
+            ? "sin conexión con el tablero; se muestra el último estado recibido"
+            : "sin conexión con el tablero"
+        );
+      }
+    }
+
+    cargar();
+    setInterval(cargar, 1000);
+  </script>
+</body>
+</html>

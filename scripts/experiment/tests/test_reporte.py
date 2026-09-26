@@ -5,7 +5,9 @@ from typing import Any
 import reporte
 
 
-def _corrida(periodo: int, repeticion: int, *, bloqueada: bool = True) -> dict[str, Any]:
+def _corrida(
+    periodo: int, repeticion: int, *, bloqueada: bool = True, fuga: bool = True
+) -> dict[str, Any]:
     sufijo = f"p{periodo}r{repeticion}"
     return {
         "periodo_auditoria_s": periodo,
@@ -35,7 +37,7 @@ def _corrida(periodo: int, repeticion: int, *, bloqueada: bool = True) -> dict[s
                 "employee_id": "E-ASN-03",
                 "poliza_id": "POL-SUR-001",
                 "session_id": f"atacante31-{sufijo}",
-                "estado_consulta_1": 200,
+                "estado_consulta_1": 200 if fuga else 401,
                 "estado_consulta_2": 401 if bloqueada else 200,
                 "tipo_error_consulta_2": "sesion-revocada" if bloqueada else None,
             },
@@ -47,16 +49,27 @@ def _corrida(periodo: int, repeticion: int, *, bloqueada: bool = True) -> dict[s
                 "estado_consulta_2": 200,
             },
         },
-        "locust_filas": [
-            {"usuario": f"asesor.norte.04-{sufijo}", "t": 0.0, "estado": 200, "tipo": None},
-            {"usuario": f"asesor.norte.04-{sufijo}", "t": 0.2, "estado": 200, "tipo": None},
-            {
-                "usuario": f"asesor.norte.04-{sufijo}",
-                "t": 0.2 + periodo,
-                "estado": 401,
-                "tipo": "sesion-revocada",
-            },
-        ],
+        "locust_filas": (
+            [
+                {"usuario": f"asesor.norte.04-{sufijo}", "t": 0.0, "estado": 200, "tipo": None},
+                {"usuario": f"asesor.norte.04-{sufijo}", "t": 0.2, "estado": 200, "tipo": None},
+                {
+                    "usuario": f"asesor.norte.04-{sufijo}",
+                    "t": 0.2 + periodo,
+                    "estado": 401,
+                    "tipo": "sesion-revocada",
+                },
+            ]
+            if fuga
+            else [
+                {
+                    "usuario": f"asesor.norte.04-{sufijo}",
+                    "t": 0.0,
+                    "estado": 401,
+                    "tipo": "sesion-revocada",
+                }
+            ]
+        ),
         "alertas": [
             {
                 "session_id": f"atacante23-{sufijo}",
@@ -91,7 +104,7 @@ def _escribir_corridas(directorio: Path, corridas: list[dict[str, Any]]) -> None
 
 
 def test_generar_informe_todo_cumple(tmp_path: Path) -> None:
-    _escribir_corridas(tmp_path, [_corrida(2, 1), _corrida(5, 1)])
+    _escribir_corridas(tmp_path, [_corrida(2, 1, fuga=False), _corrida(5, 1, fuga=False)])
 
     informe = reporte.generar_informe(tmp_path)
 
@@ -100,7 +113,8 @@ def test_generar_informe_todo_cumple(tmp_path: Path) -> None:
     assert "## Ventana de exposición por `PERIODO_AUDITORIA_S`" in informe
     assert "| 2 |" in informe
     assert "| 5 |" in informe
-    assert "NO" not in informe.split("## Criterios de aceptación")[1].split("## Ventana")[0]
+    criterios = informe.split("## Criterios de aceptación")[1].split("## Ventana")[0]
+    assert "| NO |" not in criterios
 
 
 def test_generar_informe_marca_incumplimiento(tmp_path: Path) -> None:
@@ -111,6 +125,16 @@ def test_generar_informe_marca_incumplimiento(tmp_path: Path) -> None:
 
     assert "segunda operación bloqueada" in tabla_criterios
     assert "| 0% | NO |" in tabla_criterios
+
+
+def test_un_200_antes_del_401_incumple_el_cierre_de_asr31(tmp_path: Path) -> None:
+    _escribir_corridas(tmp_path, [_corrida(2, 1)])
+
+    informe = reporte.generar_informe(tmp_path)
+    tabla = informe.split("## Criterios de aceptación")[1].split("## Ventana")[0]
+
+    assert "operaciones del atacante antes de cerrar la sesión" in tabla
+    assert "| 3 | NO |" in tabla
 
 
 def test_generar_informe_falla_sin_corridas(tmp_path: Path) -> None:

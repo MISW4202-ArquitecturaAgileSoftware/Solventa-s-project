@@ -111,6 +111,21 @@ def test_ventana_exposicion_ms_por_usuario_desde_jsonl_sintetico() -> None:
     assert ventana["asesor.norte.05"] is None
 
 
+def test_operaciones_asr31_antes_del_cierre_suma_lento_y_rafaga() -> None:
+    atacante = {"estado_consulta_1": 200, "estado_consulta_2": 401}
+    filas = [
+        {"usuario": "asesor.norte.04", "t": 0.0, "estado": 200, "tipo": None},
+        {"usuario": "asesor.norte.04", "t": 0.1, "estado": 200, "tipo": None},
+        {"usuario": "asesor.norte.04", "t": 0.2, "estado": 401, "tipo": "sesion-revocada"},
+    ]
+
+    assert metricas.operaciones_asr31_antes_del_cierre([atacante], filas) == 3
+    assert metricas.operaciones_asr31_antes_del_cierre(
+        [{"estado_consulta_1": 401, "estado_consulta_2": 401}],
+        [{"usuario": "asesor.norte.04", "t": 0.0, "estado": 401, "tipo": "sesion-revocada"}],
+    ) == 0
+
+
 def test_consultas_200_antes_del_401_por_usuario() -> None:
     filas = [
         {"usuario": "asesor.norte.04", "t": 0.2, "estado": 200, "tipo": None},
